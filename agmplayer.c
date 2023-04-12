@@ -397,7 +397,7 @@ play_set_relative_volume (GstPlay * play, gdouble volume_step)
   volume = gst_stream_volume_get_volume (GST_STREAM_VOLUME (play->playbin),
       GST_STREAM_VOLUME_FORMAT_CUBIC);
 
-  volume = (int)((volume + volume_step) * VOLUME_STEPS +0.5) / VOLUME_STEPS;
+  volume = (gdouble)(int)((volume + volume_step) * VOLUME_STEPS +0.5) / VOLUME_STEPS;
   //volume = round ((volume + volume_step) * VOLUME_STEPS) / VOLUME_STEPS;
   volume = CLAMP (volume, 0.0, 10.0);
 
@@ -427,7 +427,7 @@ play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data)
 
       /* dump graph on preroll */
       GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (play->playbin),
-          GST_DEBUG_GRAPH_SHOW_ALL, "gst-aml-mediaplayer.async-done");
+          GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.async-done");
 
       gst_print ("Prerolled.\r");
       if (play->missing != NULL && play_install_missing_plugins (play)) {
@@ -1513,6 +1513,164 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
   }
 }
 
+#define INPUT_MAX_LEN 1024
+static void trim(char *cmd)
+{
+    //remove space
+    if (cmd[0] == ' ')
+    {
+        for (int i=0; i<strlen(cmd); i++)
+        {
+            if (cmd[i] != ' ')
+            {
+                memmove(cmd, &cmd[i], strlen(cmd)-i);
+                cmd[strlen(cmd)-i] = '\0';
+                break;
+            }
+        }
+    }
+
+    //remove space \n \r. if there is only one char, it is not effective.
+    for (int i = strlen(cmd) - 1; i >= 0; i--)
+    {
+        if (cmd[i] != ' ' && cmd[i] != '\r' && cmd[i] != '\n')
+        {
+            cmd[i+1] = '\0';
+            break;
+        }
+    }
+}
+static void
+command_cb (const gchar * input, gpointer user_data)
+{
+    double value = 0;
+    GstPlay *play = (GstPlay *) user_data;
+    gchar cmd[INPUT_MAX_LEN] = {0};
+
+    //copy cmd and trim
+    int copylen = strlen(input) < INPUT_MAX_LEN ? strlen(input) : INPUT_MAX_LEN-1;
+    strncpy(cmd, input, copylen);
+    gst_print("agmplayer>%s", input);
+    trim(cmd);
+    GST_INFO ("cmd:%s\n", cmd);
+
+    if (sscanf(cmd, "seek %lf", &value) >= 1)
+    {
+        gst_print("seek to %lf\n", value);
+
+        GstQuery *query;
+        gboolean seekable = FALSE;
+        gint64 dur = -1, pos = -1;
+
+        query = gst_query_new_seeking (GST_FORMAT_TIME);
+        if (!gst_element_query (play->playbin, query)) {
+            gst_query_unref (query);
+            goto seek_failed;
+        }
+
+        gst_query_parse_seeking (query, NULL, &seekable, NULL, &dur);
+        gst_query_unref (query);
+
+        if (!seekable || dur <= 0)
+            goto seek_failed;
+
+        pos = GST_SECOND * value;
+        if (pos > dur) {
+            if (!play_next (play)) {
+                gst_print ("\n%s\n", _("Reached end of play list."));
+                g_main_loop_quit (play->loop);
+            }
+        } else {
+            if (pos < 0)
+            pos = 0;
+
+            play_do_seek (play, pos, play->rate, play->trick_mode);
+        }
+
+        return;
+
+        seek_failed:
+        {
+            gst_print ("\nCould not seek.\n");
+        }
+    }
+    else if (sscanf(cmd, "vol %lf", &value) >= 1)
+    {
+        if (value > 215)
+        {
+            value = 215;
+            gst_print("value is out of range, set max volume[%lf]\n", value);
+        }
+
+        if (value < 0)
+        {
+            value = 0;
+            gst_print("value is out of range, set min volume[%lf]\n", value);
+        }
+
+        value = (int)(value+0.5);
+        gdouble volume = value/100;
+        gst_stream_volume_set_volume (GST_STREAM_VOLUME (play->playbin),
+          GST_STREAM_VOLUME_FORMAT_CUBIC, volume);
+
+        gst_print ("set volume: %.0f%%\n", volume * 100);
+    }
+    else if(strcmp(cmd,"+")==0)
+    {
+        gdouble rate[] = {0.125, 0.25, 0.5, 1, 2, 4, 8};
+        gdouble new_rate = play->rate;
+
+        int max_level = sizeof(rate)/sizeof(rate[0]);
+        for (int i = 0; i < max_level; i++)
+        {
+            if (play->rate < rate[i])
+            {
+                new_rate = rate[i];
+                break;
+            }
+        }
+        if (new_rate != play->rate)
+        {
+            play->rate = new_rate;
+            gst_print("increase rate to %lf\n", play->rate);
+            play_set_playback_rate (play, play->rate);
+        }
+        else
+        {
+            gst_print("no need to set rate %lf\n", play->rate);
+        }
+    }
+    else if(strcmp(cmd,"-")==0)
+    {
+        gdouble rate[] = {0.125, 0.25, 0.5, 1, 2, 4, 8};
+        gdouble new_rate = play->rate;
+
+        int max_level = sizeof(rate)/sizeof(rate[0]);
+        for (int i = max_level - 1; i >= 0; i--)
+        {
+            if (play->rate > rate[i])
+            {
+                new_rate = rate[i];
+                break;
+            }
+        }
+        if (new_rate != play->rate)
+        {
+            play->rate = new_rate;
+            gst_print("decrease rate to %lf\n", play->rate);
+            play_set_playback_rate (play, play->rate);
+        }
+        else
+        {
+            gst_print("no need to set rate %lf\n", play->rate);
+        }
+    }
+    else
+    {
+        keyboard_cb (cmd, user_data);
+    }
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1580,7 +1738,7 @@ main (int argc, char **argv)
   textdomain (GETTEXT_PACKAGE);
 #endif
 
-  g_set_prgname ("gst-aml-mediaplayer");
+  g_set_prgname ("agmplayer");
   /* Ensure XInitThreads() is called if/when needed */
   g_setenv ("GST_GL_XINITTHREADS", "1", TRUE);
 
@@ -1595,7 +1753,7 @@ main (int argc, char **argv)
   }
   g_option_context_free (ctx);
 
-  GST_DEBUG_CATEGORY_INIT (play_debug, "play", 0, "gst-aml-mediaplayer");
+  GST_DEBUG_CATEGORY_INIT (play_debug, "play", 0, "agmplayer");
 
   if (print_version) {
     gchar *version_str;
@@ -1644,7 +1802,7 @@ main (int argc, char **argv)
 
   if (playlist->len == 0 && (filenames == NULL || *filenames == NULL)) {
     gst_printerr (_("Usage: %s FILE1|URI1 [FILE2|URI2] [FILE3|URI3] ..."),
-        "gst-aml-mediaplayer");
+        "agmplayer");
     gst_printerr ("\n\n"),
         gst_printerr ("%s\n\n",
         _("You must provide at least one filename or URI to play."));
@@ -1686,7 +1844,7 @@ main (int argc, char **argv)
   }
 
   if (interactive) {
-    if (gst_play_kb_set_key_handler (keyboard_cb, play)) {
+    if (gst_play_kb_set_key_handler (command_cb, play)) {
       gst_print (_("Press 'k' to see a list of keyboard shortcuts.\n"));
       atexit (restore_terminal);
     } else {

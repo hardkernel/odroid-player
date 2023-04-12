@@ -56,16 +56,15 @@ gst_play_kb_io_cb (GIOChannel * ioc, GIOCondition cond, gpointer user_data)
   GIOStatus status;
 
   if (cond & G_IO_IN) {
-    gchar buf[16] = { 0, };
-    gsize read;
+	gchar *msg;
+	gsize len;
 
-    status = g_io_channel_read_chars (ioc, buf, sizeof (buf) - 1, &read, NULL);
-    if (status == G_IO_STATUS_ERROR)
-      return FALSE;
+	status = g_io_channel_read_line (ioc, &msg, &len, NULL, NULL);
     if (status == G_IO_STATUS_NORMAL) {
       if (kb_callback)
-        kb_callback (buf, kb_callback_data);
+        kb_callback (msg, kb_callback_data);
     }
+    g_free (msg);
   }
 
   return TRUE;                  /* call us again */
@@ -108,7 +107,7 @@ gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, gpointer user_data)
 
       /* Echo off, canonical mode off, extended input processing off  */
       new_settings = term_settings;
-      new_settings.c_lflag &= ~(ECHO | ICANON | IEXTEN);
+      //new_settings.c_lflag &= ~(ECHO | ICANON | IEXTEN);
       new_settings.c_cc[VMIN] = 0;
       new_settings.c_cc[VTIME] = 0;
 
