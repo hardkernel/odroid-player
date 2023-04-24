@@ -1513,6 +1513,240 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
   }
 }
 
+static void
+play_track_selection (GstPlay * play, GstPlayTrackType track_type, gint index)
+{
+  const gchar *prop_cur, *prop_n, *prop_get, *name;
+  gint n = -1;
+  guint flag, cur_flags;
+
+  /* playbin3 variables */
+  GList *selected_streams = NULL;
+  gint cur_audio_idx = -1, cur_video_idx = -1, cur_text_idx = -1;
+  gint nb_audio = 0, nb_video = 0, nb_text = 0;
+  guint len, i;
+
+  g_mutex_lock (&play->selection_lock);
+  if (play->is_playbin3) {
+    if (!play->collection) {
+      gst_print ("No stream-collection\n");
+      g_mutex_unlock (&play->selection_lock);
+      return;
+    }
+
+    /* Check the total number of streams of each type */
+    len = gst_stream_collection_get_size (play->collection);
+    for (i = 0; i < len; i++) {
+      GstStream *stream =
+          gst_stream_collection_get_stream (play->collection, i);
+      if (stream) {
+        GstStreamType type = gst_stream_get_stream_type (stream);
+
+        if (type & GST_STREAM_TYPE_AUDIO) {
+          nb_audio++;
+        } else if (type & GST_STREAM_TYPE_VIDEO) {
+          nb_video++;
+        } else if (type & GST_STREAM_TYPE_TEXT) {
+          nb_text++;
+        } else {
+          gst_print ("Unknown stream type\n");
+        }
+      }
+    }
+  }
+
+  switch (track_type) {
+    case GST_PLAY_TRACK_TYPE_AUDIO:
+      prop_get = "get-audio-tags";
+      prop_cur = "current-audio";
+      prop_n = "n-audio";
+      name = "audio";
+      flag = 0x2;
+      if (play->is_playbin3) {
+        n = nb_audio;
+        if (play->cur_video_sid) {
+          selected_streams =
+              g_list_append (selected_streams, play->cur_video_sid);
+        }
+        if (play->cur_text_sid) {
+          selected_streams =
+              g_list_append (selected_streams, play->cur_text_sid);
+        }
+      }
+      break;
+    case GST_PLAY_TRACK_TYPE_VIDEO:
+      prop_get = "get-video-tags";
+      prop_cur = "current-video";
+      prop_n = "n-video";
+      name = "video";
+      flag = 0x1;
+      if (play->is_playbin3) {
+        n = nb_video;
+        if (play->cur_audio_sid) {
+          selected_streams =
+              g_list_append (selected_streams, play->cur_audio_sid);
+        }
+        if (play->cur_text_sid) {
+          selected_streams =
+              g_list_append (selected_streams, play->cur_text_sid);
+        }
+      }
+      break;
+    case GST_PLAY_TRACK_TYPE_SUBTITLE:
+      prop_get = "get-text-tags";
+      prop_cur = "current-text";
+      prop_n = "n-text";
+      name = "subtitle";
+      flag = 0x4;
+      if (play->is_playbin3) {
+        n = nb_text;
+        if (play->cur_audio_sid) {
+          selected_streams =
+              g_list_append (selected_streams, play->cur_audio_sid);
+        }
+        if (play->cur_video_sid) {
+          selected_streams =
+              g_list_append (selected_streams, play->cur_video_sid);
+        }
+      }
+      break;
+    default:
+      return;
+  }
+
+  if (!play->is_playbin3) {
+    gint cur=0;
+    g_object_get (play->playbin, prop_cur, &cur, prop_n, &n, "flags",
+        &cur_flags, NULL);
+  }
+
+  index--;
+  index = index < 0 ? 0 : index;
+  index = index > n-1 ? n-1 : index;
+  if (n < 1) {
+    gst_print ("No %s tracks.\n", name);
+    g_mutex_unlock (&play->selection_lock);
+  } else {
+    gchar *lcode = NULL, *lname = NULL;
+    const gchar *lang = NULL;
+    GstTagList *tags = NULL;
+
+    if (index >= n && track_type != GST_PLAY_TRACK_TYPE_VIDEO) {
+      index = -1;
+      gst_print ("Disabling %s.           \n", name);
+      if (play->is_playbin3) {
+        /* Just make it empty for the track type */
+      } else if (cur_flags & flag) {
+        cur_flags &= ~flag;
+        g_object_set (play->playbin, "flags", cur_flags, NULL);
+      }
+    } else {
+      /* For video we only want to switch between streams, not disable it altogether */
+      if (index >= n)
+        index = 0;
+
+      if (play->is_playbin3) {
+        GstStream *stream;
+
+        stream = play_get_nth_stream_in_collection (play, index, track_type);
+        if (stream) {
+          selected_streams = g_list_append (selected_streams,
+              (gchar *) gst_stream_get_stream_id (stream));
+          tags = gst_stream_get_tags (stream);
+        } else {
+          gst_print ("Collection has no stream for track %d of %d.\n",
+              index + 1, n);
+        }
+      } else {
+        if (!(cur_flags & flag) && track_type != GST_PLAY_TRACK_TYPE_VIDEO) {
+          cur_flags |= flag;
+          g_object_set (play->playbin, "flags", cur_flags, NULL);
+        }
+        g_signal_emit_by_name (play->playbin, prop_get, index, &tags);
+      }
+
+      if (tags != NULL) {
+        if (gst_tag_list_get_string (tags, GST_TAG_LANGUAGE_CODE, &lcode))
+          lang = gst_tag_get_language_name (lcode);
+        else if (gst_tag_list_get_string (tags, GST_TAG_LANGUAGE_NAME, &lname))
+          lang = lname;
+        gst_tag_list_unref (tags);
+      }
+      if (lang != NULL)
+        gst_print ("Switching to %s track %d of %d (%s).\n", name, index + 1, n,
+            lang);
+      else
+        gst_print ("Switching to %s track %d of %d.\n", name, index + 1, n);
+    }
+    g_free (lcode);
+    g_free (lname);
+    g_mutex_unlock (&play->selection_lock);
+
+    if (play->is_playbin3) {
+      if (selected_streams)
+        gst_element_send_event (play->playbin,
+            gst_event_new_select_streams (selected_streams));
+      else
+        gst_print ("Can't disable all streams !\n");
+    } else {
+      g_object_set (play->playbin, prop_cur, index, NULL);
+    }
+  }
+
+  if (selected_streams)
+    g_list_free (selected_streams);
+}
+static void
+play_track_show (GstPlay * play)
+{
+  /* playbin3 variables */
+  gint nb_audio = 0, nb_video = 0, nb_text = 0;
+
+  g_mutex_lock (&play->selection_lock);
+  if (play->is_playbin3) {
+    if (!play->collection) {
+      gst_print ("No stream-collection\n");
+      g_mutex_unlock (&play->selection_lock);
+      return;
+    }
+
+    /* Check the total number of streams of each type */
+    guint len = gst_stream_collection_get_size (play->collection);
+    for (guint i = 0; i < len; i++) {
+      GstStream *stream =
+          gst_stream_collection_get_stream (play->collection, i);
+      if (stream) {
+        GstStreamType type = gst_stream_get_stream_type (stream);
+
+        if (type & GST_STREAM_TYPE_AUDIO) {
+          nb_audio++;
+        } else if (type & GST_STREAM_TYPE_VIDEO) {
+          nb_video++;
+        } else if (type & GST_STREAM_TYPE_TEXT) {
+          nb_text++;
+        } else {
+          gst_print ("Unknown stream type\n");
+        }
+      }
+    }
+  }
+  else
+  {
+    gint cur=0;
+    guint cur_flags;
+    g_object_get (play->playbin, "current-audio", &cur, "n-audio", &nb_audio, "flags", &cur_flags, NULL);
+    g_object_get (play->playbin, "current-video", &cur, "n-video", &nb_video, "flags", &cur_flags, NULL);
+    g_object_get (play->playbin, "current-text", &cur, "n-text", &nb_text, "flags", &cur_flags, NULL);
+  }
+  g_mutex_unlock (&play->selection_lock);
+  gst_print (
+      "audio track number:%d [1-%d]\n" \
+      "video track number:%d [1-%d]\n" \
+      "subtitle track number:%d [1-%d]\n",
+      nb_audio, nb_audio, nb_video, nb_video, nb_text, nb_text
+  );
+}
+
 #define INPUT_MAX_LEN 1024
 static void trim(char *cmd)
 {
@@ -1664,6 +1898,22 @@ command_cb (const gchar * input, gpointer user_data)
         {
             gst_print("no need to set rate %lf\n", play->rate);
         }
+    }
+    else if(sscanf(cmd, "atrack %lf", &value) >= 1)
+    {
+        play_track_selection (play, GST_PLAY_TRACK_TYPE_AUDIO, (gint)value);
+    }
+    else if(sscanf(cmd, "vtrack %lf", &value) >= 1)
+    {
+        play_track_selection (play, GST_PLAY_TRACK_TYPE_VIDEO, (gint)value);
+    }
+    else if(sscanf(cmd, "strack %lf", &value) >= 1)
+    {
+        play_track_selection (play, GST_PLAY_TRACK_TYPE_SUBTITLE, (gint)value);
+    }
+    else if(strcmp(cmd,"show tracks")==0)
+    {
+        play_track_show (play);
     }
     else
     {
