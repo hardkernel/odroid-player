@@ -73,6 +73,7 @@ typedef struct
   gchar **uris;
   guint num_uris;
   gint cur_idx;
+  gchar *license_url;
 
   GstElement *playbin;
 
@@ -85,6 +86,7 @@ typedef struct
     GstElement *adec;
     GstElement *vsink;
     GstElement *asink;
+    GstElement *wlcdmi;
 
     GstElement *playsink;
     GstElement *abin;
@@ -237,12 +239,20 @@ void default_element_added(GstBin *bin, GstElement *element, gpointer user_data)
             play->adec = element;
         }
     }
+    else if (g_strrstr(GST_ELEMENT_NAME(element), "wlcdmi"))
+    {
+        play->wlcdmi = element;
+        if (play->license_url)
+        {
+          g_object_set (play->wlcdmi, "license-url", play->license_url, NULL);
+        }
+    }
 }
 
 static GstPlay *
 play_new (gchar ** uris, const gchar * audio_sink, const gchar * video_sink,
     gboolean gapless, gdouble initial_volume, gboolean verbose,
-    const gchar * flags_string, gboolean use_playbin3)
+    const gchar * flags_string, gboolean use_playbin3, const gchar *license_url)
 {
   GstElement *sink, *playbin;
   GstPlay *play;
@@ -262,6 +272,7 @@ play_new (gchar ** uris, const gchar * audio_sink, const gchar * video_sink,
   play->uris = uris;
   play->num_uris = g_strv_length (uris);
   play->cur_idx = -1;
+  play->license_url = license_url;
 
   play->playbin = playbin;
     g_signal_connect(playbin, "element-added", G_CALLBACK(default_element_added), play);
@@ -1935,6 +1946,7 @@ main (int argc, char **argv)
   gchar **filenames = NULL;
   gchar *audio_sink = NULL;
   gchar *video_sink = NULL;
+  gchar *license_url = NULL;
   gchar **uris;
   gchar *flags = NULL;
   guint num, i;
@@ -1977,6 +1989,7 @@ main (int argc, char **argv)
               "(gapless is ignored)"),
         NULL},
     {G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_FILENAME_ARRAY, &filenames, NULL},
+    {"license-url", 0, 0, G_OPTION_ARG_STRING, &license_url, N_("license-url"), NULL},
     {NULL}
   };
 
@@ -2016,6 +2029,7 @@ main (int argc, char **argv)
 
     g_free (audio_sink);
     g_free (video_sink);
+    g_free (license_url);
     g_free (playlist_file);
 
     return 0;
@@ -2061,6 +2075,7 @@ main (int argc, char **argv)
 
     g_free (audio_sink);
     g_free (video_sink);
+    g_free (license_url);
 
     return 1;
   }
@@ -2085,7 +2100,7 @@ main (int argc, char **argv)
 
   /* prepare */
   play = play_new (uris, audio_sink, video_sink, gapless, volume, verbose,
-      flags, use_playbin3);
+      flags, use_playbin3, license_url);
 
   if (play == NULL) {
     gst_printerr
@@ -2110,6 +2125,7 @@ main (int argc, char **argv)
 
   g_free (audio_sink);
   g_free (video_sink);
+  g_free (license_url);
 
   gst_print ("\n");
   gst_deinit ();
