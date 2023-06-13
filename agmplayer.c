@@ -39,7 +39,7 @@
 
 #include <glib/gprintf.h>
 
-#include "agmplayer-kb.h"
+#include "keyboard.h"
 
 #define VOLUME_STEPS 20
 

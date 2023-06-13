@@ -23,11 +23,28 @@ if ENABLE_SUBTEC
 AM_CPPFLAGS += -DENABLE_SUBTEC
 endif
 
+plugin_LTLIBRARIES = libkeyboard.la libAGMPlayer.la
+libkeyboard_la_SOURCES = keyboard.c keyboard.h
+libkeyboard_la_CFLAGS =  $(GST_CFLAGS)
+libkeyboard_la_LDFLAGS = $(GST_LIBS) -module -avoid-version
 
-bin_PROGRAMS = agmplayer
-agmplayer_SOURCES = agmplayer.c agmplayer-kb.c agmplayer-kb.h
-agmplayer_CFLAGS =  $(GST_CFLAGS)
-agmplayer_LDFLAGS = $(GST_LIBS)
-agmplayer_LDADD = -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0 \
+libAGMPlayer_la_SOURCES = porting.c porting.h
+libAGMPlayer_la_CFLAGS =  $(GST_CFLAGS)
+libAGMPlayer_la_LDFLAGS = $(GST_LIBS) -module -avoid-version
+libAGMPlayer_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0 \
                             $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
-noinst_HEADERS = agmplayer-kb.h
+
+
+bin_PROGRAMS =  AGMPlayer-sample agmplayer
+agmplayer_SOURCES = agmplayer.c
+agmplayer_CFLAGS =  $(GST_CFLAGS)
+agmplayer_LDFLAGS = $(GST_LIBS) -module -avoid-version
+agmplayer_LDADD = -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0  libkeyboard.la \
+                            $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
+
+AGMPlayer_sample_SOURCES = testbin.c
+AGMPlayer_sample_LDFLAGS = -module -avoid-version
+AGMPlayer_sample_LDADD = libkeyboard.la libAGMPlayer.la
+
+
+

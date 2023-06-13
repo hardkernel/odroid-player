@@ -1,7 +1,7 @@
 /* GStreamer command line playback testing utility - keyboard handling helpers
  *
- * Copyright (C) 2013 Tim-Philipp Müller <tim centricular net>
- * Copyright (C) 2013 Centricular Ltd
+ * Copyright (C) 2013
+ * Copyright (C) 2013
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -23,7 +23,8 @@
 #include "config.h"
 #endif
 
-#include "agmplayer-kb.h"
+#include "keyboard.h"
+#include <glib.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,7 +40,6 @@
 #include <io.h>
 #endif
 
-#include <gst/gst.h>
 
 /* This is all not thread-safe, but doesn't have to be really */
 static GstPlayKbFunc kb_callback;
@@ -70,13 +70,12 @@ gst_play_kb_io_cb (GIOChannel * ioc, GIOCondition cond, gpointer user_data)
   return TRUE;                  /* call us again */
 }
 
-gboolean
-gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, gpointer user_data)
+int gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, void* user_data)
 {
   GIOChannel *ioc;
 
   if (!isatty (STDIN_FILENO)) {
-    GST_INFO ("stdin is not connected to a terminal");
+    //GST_INFO ("stdin is not connected to a terminal");
     return FALSE;
   }
 
@@ -197,7 +196,7 @@ gst_play_kb_win32_thread (gpointer user_data)
     DWORD ret = WaitForMultipleObjects (2, handles, FALSE, INFINITE);
 
     if (ret == WAIT_FAILED) {
-      GST_WARNING ("WaitForMultipleObject Failed");
+      //GST_WARNING ("WaitForMultipleObject Failed");
       return NULL;
     }
 
@@ -221,7 +220,7 @@ gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, gpointer user_data)
   gint fd = _fileno (stdin);
 
   if (!_isatty (fd)) {
-    GST_INFO ("stdin is not connected to a terminal");
+    //GST_INFO ("stdin is not connected to a terminal");
     return FALSE;
   }
 
@@ -252,7 +251,7 @@ gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, gpointer user_data)
     win32_handler->event_handle = CreateEvent (&sec_attrs, TRUE, FALSE, NULL);
 
     if (!win32_handler->event_handle) {
-      GST_WARNING ("Couldn't create event handle");
+      //GST_WARNING ("Couldn't create event handle");
       g_free (win32_handler);
       win32_handler = NULL;
 
@@ -261,7 +260,7 @@ gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, gpointer user_data)
 
     win32_handler->console_handle = GetStdHandle (STD_INPUT_HANDLE);
     if (!win32_handler->console_handle) {
-      GST_WARNING ("Couldn't get console handle");
+      //GST_WARNING ("Couldn't get console handle");
       CloseHandle (win32_handler->event_handle);
       g_free (win32_handler);
       win32_handler = NULL;
@@ -285,7 +284,7 @@ gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, gpointer user_data)
 gboolean
 gst_play_kb_set_key_handler (GstPlayKbFunc key_func, gpointer user_data)
 {
-  GST_FIXME ("Keyboard handling for this OS needs to be implemented");
+  //GST_FIXME ("Keyboard handling for this OS needs to be implemented");
   return FALSE;
 }
 

@@ -1,7 +1,7 @@
 /* GStreamer command line playback testing utility - keyboard handling helpers
  *
- * Copyright (C) 2013 Tim-Philipp Müller <tim centricular net>
- * Copyright (C) 2013 Centricular Ltd
+ * Copyright (C) 2013
+ * Copyright (C) 2013
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,15 +21,15 @@
 #ifndef __GST_PLAY_KB_INCLUDED__
 #define __GST_PLAY_KB_INCLUDED__
 
-#include <glib.h>
+
 
 #define GST_PLAY_KB_ARROW_UP    "\033[A"
 #define GST_PLAY_KB_ARROW_DOWN  "\033[B"
 #define GST_PLAY_KB_ARROW_RIGHT "\033[C"
 #define GST_PLAY_KB_ARROW_LEFT  "\033[D"
 
-typedef void (*GstPlayKbFunc) (const gchar * kb_input, gpointer user_data);
+typedef void (*GstPlayKbFunc) (const char * kb_input, void* user_data);
 
-gboolean gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, gpointer user_data);
+int gst_play_kb_set_key_handler (GstPlayKbFunc kb_func, void* user_data);
 
 #endif /* __GST_PLAY_KB_INCLUDED__ */
