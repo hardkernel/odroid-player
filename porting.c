@@ -388,6 +388,29 @@ AGMP_HANDLE agmp_init (void)
   char* audio_sink = "amlhalasink";
   char* video_sink = "westerossink";
 
+  /*WESTEROS_SINK = 0
+   *AMLVIDEO_SINK = 1
+   *CLUTTERAUTOVIDEO_SINK = 2 */
+  const gchar *sink_name = g_getenv ("GST_CFG_VIDEO_SINK");
+  if ( sink_name )
+  {
+     int sinkType = atoi(sink_name);
+      switch ( sinkType )
+      {
+        case 0:
+            video_sink = "westerossink";
+            break;
+        case 1:
+            video_sink = "amlvideosink";
+            break;
+        case 2:
+            video_sink = "clutterautovideosink";
+            break;
+        default:
+            video_sink = "westerossink";
+      }
+  }
+
   GstElement *playbin = NULL;
   if (use_playbin3) {
     playbin = gst_element_factory_make ("playbin3", "playbin");
