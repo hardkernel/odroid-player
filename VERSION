@@ -1,0 +1,12 @@
+Major_V=1
+Minor_V=1
+BaseChangeId=I106a3cd0c85adb3a0826d21519116944a9508657
+
+#V1.0.8 Release Notes
+#Release_ChangeId_V1_0=I106a3cd0c85adb3a0826d21519116944a9508657
+#add environment variable to select sink element
+#add porting layer base code
+#support widevine
+#add track switch command
+#add seek/trickplay/vol command
+#base code
