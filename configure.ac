@@ -21,13 +21,13 @@ dnl Process this file with autoconf to produce a configure script.
 
 dnl AC_PREREQ([2.69])
 AC_INIT(agmplayer, version-1.0)
-AC_CONFIG_SRCDIR([])
+AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE([foreign no-dist-gzip dist-bzip2 1.9])
 LT_INIT
 
 dnl subdirectories.
-SUBDIRS=""
+#SUBDIRS=""
 
 dnl Checks for programs.
 AC_PROG_CXX
@@ -97,10 +97,10 @@ AS_IF([test "x$have_gst1" != "xyes"], [
   PKG_CHECK_MODULES([GST], [gstreamer-0.10 >= 0.10.28])
 ], [])
 
-plugindir="\$(libdir)/gstreamer-$GST_MAJORMINOR"
+plugindir="\$(libdir)/"
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 0.10.28])
 AC_SUBST(GST_MAJORMINOR)
 AC_SUBST(ENABLE_SUBTEC)
 AC_SUBST(plugindir)
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT

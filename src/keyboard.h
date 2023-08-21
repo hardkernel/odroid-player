@@ -18,8 +18,8 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
-#ifndef __GST_PLAY_KB_INCLUDED__
-#define __GST_PLAY_KB_INCLUDED__
+#ifndef __KEY_BOARD_INCLUDED__
+#define __KEY_BOARD_INCLUDED__
 
 
 

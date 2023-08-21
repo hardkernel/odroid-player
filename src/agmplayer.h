@@ -18,8 +18,8 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
-#ifndef __PORTING_INCLUDED__
-#define __PORTING_INCLUDED__
+#ifndef __AGMPLAYER_INCLUDED__
+#define __AGMPLAYER_INCLUDED__
 
 #include <stdio.h>
 
@@ -61,6 +61,8 @@ typedef enum
   AGMP_MESSAGE_FIRST_AFRAME,
   AGMP_MESSAGE_SEEK_DONE,
   AGMP_MESSAGE_MEDIA_INFO_CHANGED,
+  AGMP_MESSAGE_STATE_CHANGE,
+  AGMP_MESSAGE_AAMP_STATE_CHANGE,//support aamp
 } AGMP_MESSAGE_TYPE;
 
 typedef enum
@@ -111,12 +113,14 @@ typedef struct
 
 #define AGMP_HANDLE void*
 typedef void (*timeout_callback) (AGMP_HANDLE handle);
-typedef void (*message_callback) (AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type);
+typedef void (*message_callback) (AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, void* userdata);
 
 AGMP_HANDLE agmp_init (void);
 int agmp_set_uri(AGMP_HANDLE handle, char* uri); //called before agmp_prepare
 int agmp_set_license_url(AGMP_HANDLE handle, char* license_url); //called before agmp_prepare if need license_url
 int agmp_set_volume(AGMP_HANDLE handle, double volume);
+double agmp_get_volume(AGMP_HANDLE handle);
+int agmp_set_video_mute(AGMP_HANDLE handle, int mute);
 int agmp_prepare (AGMP_HANDLE handle);
 int agmp_play (AGMP_HANDLE handle);
 int agmp_stop (AGMP_HANDLE handle);
@@ -125,19 +129,27 @@ int agmp_exit (AGMP_HANDLE handle);
 long long agmp_get_duration(AGMP_HANDLE handle);
 long long agmp_get_position(AGMP_HANDLE handle);
 int agmp_set_speed(AGMP_HANDLE handle, AGMP_PLAY_SPEED rate);
+int agmp_get_speed(AGMP_HANDLE handle);
 int agmp_seek(AGMP_HANDLE handle, double position);
 AGMP_SSTATUS agmp_get_state(AGMP_HANDLE handle);
 
+
 unsigned int aamp_create_timer(unsigned int interval, timeout_callback callback, AGMP_HANDLE handle);
 void aamp_destroy_timer(unsigned int timer_id);
-int aamp_register_events(AGMP_HANDLE handle, message_callback callback);
+int aamp_register_events(AGMP_HANDLE handle, message_callback callback, void* userdata);
 void agmp_deinit (AGMP_HANDLE handle);
 
 int agmp_set_window_size(AGMP_HANDLE handle, int x, int y, int w, int h); //called before agmp_prepare
+int agmp_get_window_size(AGMP_HANDLE handle, int* x, int* y, int* w, int* h);
+int agmp_set_zoom(AGMP_HANDLE handle, int zoom);
 int aamp_get_media_track_num(AGMP_HANDLE handle, int* pn_video, int* pn_audio, int* pn_text);
 int aamp_get_video_track_info(AGMP_HANDLE handle, int trackid, VideoInfo* video_info);
 int aamp_get_audio_track_info(AGMP_HANDLE handle, int trackid, AudioInfo* audio_info);
 int aamp_get_text_track_info(AGMP_HANDLE handle, int trackid, TextInfo* text_info);
 int aamp_set_audio_track(AGMP_HANDLE handle, int trackid);
 int agmp_get_buffering_percent(AGMP_HANDLE handle);
-#endif /* __PORTING_LAYER_INCLUDED__ */
+/* support aamp */
+unsigned int agmp_get_aamp_state(AGMP_HANDLE handle);
+int agmp_set_zoom(AGMP_HANDLE handle, int zoom);
+int agmp_set_video_mute(AGMP_HANDLE handle, int mute);
+#endif /* __AGMPLAYER_INCLUDED__ */

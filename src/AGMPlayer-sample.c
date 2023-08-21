@@ -26,7 +26,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include "keyboard.h"
-#include "porting.h"
+#include "agmplayer.h"
 
 typedef int bool;
 #define FALSE 0
@@ -48,7 +48,7 @@ unsigned int timer_id;
 static bool play_next (AGMP_HANDLE handle);
 static bool play_prev (AGMP_HANDLE handle);
 static bool agmp_timeout (void* user_data);
-static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type);
+static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, void* userdata);
 static void keyboard_cb (const char * key_input, void* user_data);
 
 static void
@@ -132,7 +132,7 @@ static void collect_media_info(AGMP_HANDLE handle)
   }
 }
 
-static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type)
+static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, void* userdata)
 {
   switch (type)
   {
@@ -215,12 +215,15 @@ static void trim(char *cmd)
   }
 }
 
+#define DEBUG_TEST_CMD 0
+
 AGMP_PLAY_SPEED play_speed = AGMP_PLAY_SPEED_1;
 static void command_cb (const char * input, void* user_data)
 {
   double value = 0;
   AGMP_HANDLE handle = (AGMP_HANDLE) user_data;
   char cmd[INPUT_MAX_LEN] = {0};
+  int x = 0, y = 0, w = 0, h = 0;
 
   //copy cmd and trim
   int copylen = strlen(input) < INPUT_MAX_LEN ? strlen(input) : INPUT_MAX_LEN-1;
@@ -298,6 +301,35 @@ static void command_cb (const char * input, void* user_data)
     agmp_prepare(handle);
     agmp_play (handle);
   }
+#if DEBUG_TEST_CMD
+  else if (strcmp(cmd,"getvol")==0)
+  {
+    gst_print ("agmp_get_volume............%f\n", agmp_get_volume(handle));
+  }
+  else if (strcmp(cmd,"getspeed")==0)
+  {
+    gst_print ("agmp_get_speed............%d\n", agmp_get_speed(handle));
+  }
+  else if (strcmp(cmd,"getwindowsize")==0)
+  {
+    agmp_get_window_size(handle, &x, &y, &w, &h);
+    gst_print ("agmp_get_window_size............[%d,%d,%d,%d]\n", x, y, w, h);
+  }
+  else if (sscanf(cmd, "zoom %lf", &value) >= 1)
+  {
+    agmp_set_zoom(handle, value);
+    gst_print ("agmp_set_zoom............[%d]\n", (int)value);
+  }
+  else if (sscanf(cmd, "vmute %lf", &value) >= 1)
+  {
+    agmp_set_video_mute(handle, value);
+    gst_print ("agmp_set_video_mute............[%d]\n", (int)value);
+  }
+  else if (sscanf(cmd, "setwindowsize %d,%d,%d,%d", &x, &y, &w, &h) >= 1)
+  {
+    agmp_set_window_size(handle, x, y, w, h);
+  }
+#endif
   else
   {
 
@@ -430,7 +462,7 @@ int main (int argc, char **argv)
     }
   }
 
-  aamp_register_events(handle, agmp_message_callback);
+  aamp_register_events(handle, agmp_message_callback, NULL);
   file_list.cur_index = 0;
   gst_print ("\n uris %s, argc:%d\n", file_list.uris[file_list.cur_index], argc);
   agmp_set_uri(handle, file_list.uris[file_list.cur_index]);

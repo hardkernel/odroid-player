@@ -28,8 +28,7 @@
 #include <gst/pbutils/pbutils.h>
 #include <gst/tag/tag.h>
 #include <gst/math-compat.h>
-#include "porting.h"
-#include "keyboard.h"
+#include "agmplayer.h"
 
 typedef struct
 {
@@ -38,6 +37,26 @@ typedef struct
   int w;
   int h;
 } WindowSize;
+
+/* PrivAAMPState is for aamp*/
+typedef enum
+{
+	eSTATE_IDLE,         /**< 0  - Player is idle */
+	eSTATE_INITIALIZING, /**< 1  - Player is initializing a particular content */
+	eSTATE_INITIALIZED,  /**< 2  - Player has initialized for a content successfully */
+	eSTATE_PREPARING,    /**< 3  - Player is loading all associated resources */
+	eSTATE_PREPARED,     /**< 4  - Player has loaded all associated resources successfully */
+	eSTATE_BUFFERING,    /**< 5  - Player is in buffering state */
+	eSTATE_PAUSED,       /**< 6  - Playback is paused */
+	eSTATE_SEEKING,      /**< 7  - Seek is in progress */
+	eSTATE_PLAYING,      /**< 8  - Playback is in progress */
+	eSTATE_STOPPING,     /**< 9  - Player is stopping the playback */
+	eSTATE_STOPPED,      /**< 10 - Player has stopped playback successfully */
+	eSTATE_COMPLETE,     /**< 11 - Playback completed */
+	eSTATE_ERROR,        /**< 12 - Error encountered and playback stopped */
+	eSTATE_RELEASED,     /**< 13 - Player has released all resources for playback */
+	eSTATE_BLOCKED       /**< 14 - Player has blocked and cant play content*/
+} PrivAAMPState;
 
 typedef struct
 {
@@ -96,6 +115,14 @@ typedef struct
 
   GstPlayTrickMode trick_mode;
   gdouble rate;
+  double volume;
+
+  /*support aamp*/
+  PrivAAMPState aamp_state;
+  gboolean video_muted;
+  gboolean audio_muted;
+  char videoRectangle[32];
+  void* userdata;
 } GstPlay;
 
 typedef enum
@@ -124,6 +151,7 @@ static void play_track_selection (GstPlay * play, GstPlayTrackType track_type, g
 static void play_set_playback_rate (GstPlay * play, gdouble rate);
 static int set_pipeline(GstPlay *player, gboolean use_playbin3, const gchar *flags_string, char* audio_sink, char* video_sink);
 static int agmp_replay (AGMP_HANDLE handle);
+static void set_aamp_state(GstPlay *player, PrivAAMPState state);
 
 static void
 gst_play_printf (const gchar * format, ...)
@@ -142,7 +170,7 @@ gst_play_printf (const gchar * format, ...)
   va_end (args);
 
   if (len > 0 && str != NULL)
-    gst_print ("%s", str);
+    gst_print ("[AGMPlayer] %s", str);
 
   g_free (str);
 }
@@ -237,57 +265,58 @@ static void default_element_added(GstBin *bin, GstElement *element, gpointer use
   }
 }
 
+static void callback_to_app(GstPlay *player, AGMP_MESSAGE_TYPE type, void * userdata)
+{
+  if (NULL == player)
+  {
+    gst_print ("player is null.\n");
+    return;
+  }
+  if (player->notify_app)
+  {
+    player->notify_app(player, type, userdata);
+  }
+}
+
 #define CHECK_POINTER_VALID(p) \
   do { \
     if (NULL == (p)) { \
       gst_print ("pointer is null.\n"); \
-	    return AAMP_NULL_POINTER; \
-	  } \
+      return AAMP_NULL_POINTER; \
+    } \
   } while(0);
 
-static void video_underflow(gpointer user_data)
+static void video_underflow(gpointer handle)
 {
-  if (NULL == user_data)
+  if (NULL == handle)
   {
-    gst_print ("user_data is null.\n");
+    gst_print ("handle is null.\n");
     return;
   }
-  GstPlay *player = user_data;
-
-  if (player->notify_app)
-  {
-    player->notify_app(player, AGMP_MESSAGE_VIDEO_UNDERFLOW);
-  }
+  GstPlay *player = handle;
+  callback_to_app(player, AGMP_MESSAGE_VIDEO_UNDERFLOW, player->userdata);
 }
 
-static void video_first_frame(gpointer user_data)
+static void video_first_frame(gpointer handle)
 {
-  if (NULL == user_data)
+  if (NULL == handle)
   {
-    gst_print ("user_data is null.\n");
+    gst_print ("handle is null.\n");
     return;
   }
-  GstPlay *player = user_data;
-
-  if (player->notify_app)
-  {
-    player->notify_app(player, AGMP_MESSAGE_FIRST_VFRAME);
-  }
+  GstPlay *player = handle;
+  callback_to_app(player, AGMP_MESSAGE_FIRST_VFRAME, player->userdata);
 }
 
-static void audio_underflow(gpointer user_data)
+static void audio_underflow(gpointer handle)
 {
-  if (NULL == user_data)
+  if (NULL == handle)
   {
-    gst_print ("user_data is null.\n");
+    gst_print ("handle is null.\n");
     return;
   }
-  GstPlay *player = user_data;
-
-  if (player->notify_app)
-  {
-    player->notify_app(player, AGMP_MESSAGE_AUDIO_UNDERFLOW);
-  }
+  GstPlay *player = handle;
+  callback_to_app(player, AGMP_MESSAGE_AUDIO_UNDERFLOW, player->userdata);
 }
 
 static void audio_first_frame(gpointer user_data)
@@ -298,11 +327,7 @@ static void audio_first_frame(gpointer user_data)
     return;
   }
   GstPlay *player = user_data;
-
-  if (player->notify_app)
-  {
-    player->notify_app(player, AGMP_MESSAGE_FIRST_AFRAME);
-  }
+  callback_to_app(player, AGMP_MESSAGE_FIRST_AFRAME, player->userdata);
 }
 
 int agmp_set_uri(AGMP_HANDLE handle, char* uri)
@@ -368,6 +393,7 @@ AGMP_HANDLE agmp_init (void)
   player->loop = NULL;
   player->bus_watch = 0;
   player->notify_app = NULL;
+  player->userdata = NULL;
 
   player->missing = NULL;
   player->buffering = FALSE;
@@ -382,6 +408,7 @@ AGMP_HANDLE agmp_init (void)
   player->win_size.h = 0;
   player->percent = 0;
   player->async_done = FALSE;
+  player->aamp_state = eSTATE_IDLE;
 
   gboolean use_playbin3 = FALSE;
   gchar *flags_string = NULL;
@@ -453,7 +480,7 @@ AGMP_HANDLE agmp_init (void)
     if (sink != NULL) {
       g_object_set (player->playbin, "video-sink", sink, NULL);
       player->vsink = sink;
-      g_object_set (player->vsink, "stop-keep-frame", TRUE, NULL);
+      //g_object_set (player->vsink, "stop-keep-frame", TRUE, NULL);
       //g_signal_connect (player->vsink, "buffer-underflow-callback", G_CALLBACK (video_underflow), player);
       //g_signal_connect (player->vsink, "first-video-frame-callback", G_CALLBACK (video_first_frame), player);
     }
@@ -499,7 +526,7 @@ int agmp_prepare (AGMP_HANDLE handle)
   GstPlay* player = (GstPlay*)handle;
 
   gst_print ("prepare stream enter.\n");
-
+  set_aamp_state(player, eSTATE_PREPARING);
   if (AGMP_STATUS_PREPARED == player->status)
   {
 	  gst_print ("already playing: %d.", player->status);
@@ -545,6 +572,7 @@ int agmp_prepare (AGMP_HANDLE handle)
   player->async_done = FALSE;
   player->status = AGMP_STATUS_PREPARED;
   gst_print ("prepare stream over.\n");
+  set_aamp_state(player, eSTATE_PREPARED);
   return AAMP_SUCCESS;
 }
 
@@ -569,7 +597,7 @@ int agmp_play (AGMP_HANDLE handle)
   player->desired_state = GST_STATE_PLAYING;
   gst_element_set_state (player->playbin, GST_STATE_PLAYING);
   player->status = AGMP_STATUS_PLAYING;
-
+  set_aamp_state(player, eSTATE_PLAYING);
 }
 
 int agmp_pause (AGMP_HANDLE handle)
@@ -597,6 +625,7 @@ int agmp_pause (AGMP_HANDLE handle)
   player->desired_state = GST_STATE_PAUSED;
   gst_element_set_state (player->playbin, GST_STATE_PAUSED);
   player->status = AGMP_STATUS_PAUSED;
+  set_aamp_state(player, eSTATE_PAUSED);
 
   return AAMP_SUCCESS;
 }
@@ -617,8 +646,12 @@ int agmp_stop (AGMP_HANDLE handle)
     gst_print ("can't be called in this state: %d.", player->status);
     return AAMP_FAILED_IN_THIS_STATE;
   }
-
+  set_aamp_state(player, eSTATE_STOPPING);
   gst_element_set_state (player->playbin, GST_STATE_READY);
+
+  // wait state change
+  usleep(1000000);
+  set_aamp_state(player, eSTATE_STOPPED);
   player->status = AGMP_STATUS_STOPED;
 }
 
@@ -626,7 +659,7 @@ void quit_thread(GstPlay* player)
 {
   if (player->play_thread) {
     gst_print ("\njoin thread\n");
-    //g_thread_join (player->play_thread);
+    g_thread_join (player->play_thread);
     player->play_thread = NULL;
   }
 }
@@ -640,13 +673,14 @@ int agmp_exit (AGMP_HANDLE handle)
 {
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
-
+  set_aamp_state(player, eSTATE_RELEASED);
   gst_print ("exit enter.\n");
   quit_loop(player);
   agmp_deinit(handle);
   quit_thread(player);
   g_free (player);
-  gst_deinit();
+  player = NULL;
+  //gst_deinit();
   gst_print ("exit over.\n");
   return AAMP_SUCCESS;
 }
@@ -689,6 +723,28 @@ AGMP_SSTATUS agmp_get_state(AGMP_HANDLE handle)
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   return player->status;
+}
+
+unsigned int agmp_get_aamp_state(AGMP_HANDLE handle)
+{
+  if (NULL == handle) {
+    return eSTATE_IDLE;
+  }
+  GstPlay* player = (GstPlay*)handle;
+  return player->aamp_state;
+}
+
+static void set_aamp_state(GstPlay *player, PrivAAMPState state)
+{
+  if (NULL == player) {
+    return;
+  }
+
+  if (player->aamp_state != state) {
+    player->aamp_state = state;
+    //notify aamp
+    callback_to_app(player, AGMP_MESSAGE_AAMP_STATE_CHANGE, player->userdata);
+  }
 }
 
 long long agmp_get_position(AGMP_HANDLE handle)
@@ -751,6 +807,13 @@ int agmp_set_speed(AGMP_HANDLE handle, AGMP_PLAY_SPEED rate)
     gst_print("no need to set rate %lf\n", player->rate);
   }
   return AAMP_SUCCESS;
+}
+
+int agmp_get_speed(AGMP_HANDLE handle)
+{
+  CHECK_POINTER_VALID(handle);
+  GstPlay* player = (GstPlay*)handle;
+  return player->rate;
 }
 
 /* reset for new file/stream */
@@ -926,6 +989,11 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
 {
   GstPlay *player = user_data;
 
+  if (player == NULL) {
+    gst_message_ref (msg);
+    return TRUE;
+  }
+
   switch (GST_MESSAGE_TYPE (msg)) {
     case GST_MESSAGE_ASYNC_DONE:
 
@@ -940,10 +1008,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
       }
       player->async_done = TRUE;
       //notify app
-      if (player->notify_app)
-      {
-        player->notify_app(player, AGMP_MESSAGE_ASYNC_DONE);
-      }
+      callback_to_app(player, AGMP_MESSAGE_ASYNC_DONE, player->userdata);
       break;
     case GST_MESSAGE_BUFFERING:{
       gint percent;
@@ -971,12 +1036,9 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
         }
       }
 
-	  //notify app
-    player->percent = percent;
-	  if (player->notify_app)
-	  {
-		  player->notify_app(player, AGMP_MESSAGE_BUFFERING);
-	  }
+      //notify app
+      player->percent = percent;
+      callback_to_app(player, AGMP_MESSAGE_BUFFERING, player->userdata);
       break;
     }
     case GST_MESSAGE_CLOCK_LOST:{
@@ -1016,10 +1078,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
         }*/
 
       //notify app
-      if (player->notify_app)
-      {
-        player->notify_app(player, AGMP_MESSAGE_EOS);
-      }
+      callback_to_app(player, AGMP_MESSAGE_EOS, player->userdata);
       break;
     case GST_MESSAGE_WARNING:{
       GError *err;
@@ -1063,15 +1122,12 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
         break;
       }
       // try next item in list then
-      if (!agmp_replay (player)) {
-        gst_print ("%s\n", _("Reached end of play list."));
-        g_main_loop_quit (player->loop);
-      }
-	  //notify app
-	  if (player->notify_app)
-	  {
-		  player->notify_app(player, AGMP_MESSAGE_ERROR);
-	  }
+      //if (!agmp_replay (player)) {
+        //gst_print ("%s\n", _("Reached end of play list."));
+        //g_main_loop_quit (player->loop);
+      //}
+      //notify app
+      callback_to_app(player, AGMP_MESSAGE_ERROR, player->userdata);
       break;
     }
     case GST_MESSAGE_ELEMENT:
@@ -1086,25 +1142,8 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
             case GST_NAVIGATION_EVENT_KEY_PRESS:
             {
               const gchar *key;
-
               if (gst_navigation_event_parse_key_event (ev, &key)) {
                 GST_INFO ("Key press: %s", key);
-
-                if (strcmp (key, "Left") == 0)
-                  key = GST_PLAY_KB_ARROW_LEFT;
-                else if (strcmp (key, "Right") == 0)
-                  key = GST_PLAY_KB_ARROW_RIGHT;
-                else if (strcmp (key, "Up") == 0)
-                  key = GST_PLAY_KB_ARROW_UP;
-                else if (strcmp (key, "Down") == 0)
-                  key = GST_PLAY_KB_ARROW_DOWN;
-                else if (strcmp (key, "space") == 0 ||
-                    strcmp (key, "Space") == 0)
-                  key = " ";
-                else if (strlen (key) > 1)
-                  break;
-
-                //keyboard_cb (key, user_data);
               }
               break;
             }
@@ -1239,6 +1278,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
         else if (state == GST_STATE_PLAYING) {
           gst_print ("bus message status change to playing, %p\n", player->playbin);
         }
+        callback_to_app(player, AGMP_MESSAGE_STATE_CHANGE, player->userdata);
       }
       break;
     }
@@ -1276,10 +1316,35 @@ int agmp_set_volume(AGMP_HANDLE handle, double volume)
   }
 
   volume = ((int)(volume+0.5))/100.0;
-  gst_stream_volume_set_volume (GST_STREAM_VOLUME (player->playbin),
-  GST_STREAM_VOLUME_FORMAT_CUBIC, volume);
+  //gst_stream_volume_set_volume (GST_STREAM_VOLUME (player->playbin),
+  //GST_STREAM_VOLUME_FORMAT_CUBIC, player->volume );
+  if (!player->asink) {
+    gst_print ("set volume failed, asink is null.\n");
+    return AAMP_FAILED;
+  }
+  player->volume = volume;
+  g_object_set(player->asink, "stream-volume", player->volume, NULL);
+  gst_print ("set volume: %.0f%%\n", player->volume  * 100);
+  return AAMP_SUCCESS;
+}
 
-  gst_print ("set volume: %.0f%%\n", volume * 100);
+double agmp_get_volume(AGMP_HANDLE handle)
+{
+  CHECK_POINTER_VALID(handle);
+  GstPlay* player = (GstPlay*)handle;
+  return player->volume * 100;
+}
+
+int agmp_set_video_mute(AGMP_HANDLE handle, int mute)
+{
+  CHECK_POINTER_VALID(handle);
+  GstPlay* player = (GstPlay*)handle;
+  player->video_muted = mute;
+  if (!player->vsink) {
+    gst_print ("set video mute failed, vsink is null.\n");
+    return AAMP_FAILED;
+  }
+  g_object_set(player->vsink, "mute", player->video_muted, NULL);
   return AAMP_SUCCESS;
 }
 
@@ -1885,10 +1950,35 @@ int agmp_set_window_size(AGMP_HANDLE handle, int x, int y, int w, int h)
   if (player->win_size.w > 0 && player->win_size.h > 0) {
     char videoRectangle[32] = {0};
     sprintf(videoRectangle, "%d,%d,%d,%d", player->win_size.x,player->win_size.y,player->win_size.w,player->win_size.h);
-    g_object_set (player->vsink, "rectangle", videoRectangle, NULL);
+    memcpy(player->videoRectangle, videoRectangle, 32);
+    g_object_set (player->vsink, "rectangle", player->videoRectangle, NULL);
     gst_print ("set window size %s\n", videoRectangle);
   }
 
+  return AAMP_SUCCESS;
+}
+
+int agmp_get_window_size(AGMP_HANDLE handle, int* x, int* y, int* w, int* h)
+{
+  CHECK_POINTER_VALID(handle);
+  GstPlay* player = (GstPlay*)handle;
+
+  *x = player->win_size.x;
+  *y = player->win_size.y;
+  *w = player->win_size.w;
+  *h = player->win_size.h;
+  return AAMP_SUCCESS;
+}
+
+int agmp_set_zoom(AGMP_HANDLE handle, int zoom)
+{
+  CHECK_POINTER_VALID(handle);
+  GstPlay* player = (GstPlay*)handle;
+  if (!player->vsink)
+  {
+    return AAMP_FAILED;
+  }
+  g_object_set(player->vsink, "scale-mode", 0 == zoom ? 0 : 3, NULL);
   return AAMP_SUCCESS;
 }
 
@@ -1959,11 +2049,12 @@ void aamp_destroy_timer(unsigned int timer_id)
 	g_source_remove (timer_id);
 }
 
-int aamp_register_events(AGMP_HANDLE handle, message_callback callback)
+int aamp_register_events(AGMP_HANDLE handle, message_callback callback, void* userdata)
 {
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
   player->notify_app = callback;
+  player->userdata = userdata;
   return AAMP_SUCCESS;
 }
