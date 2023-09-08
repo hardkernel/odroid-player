@@ -1,0 +1,13 @@
+WHAT IT IS
+----------
+
+This is a player based on gstreamer
+
+More features and templates might get added later on.
+
+HOW TO USE IT
+-------------
+
+AGMPlayer-sample.c
+We have provided a demo on how to use the APIs
+

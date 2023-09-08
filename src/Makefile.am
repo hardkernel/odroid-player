@@ -1,20 +1,19 @@
 ##########################################################################
-# Copyright 2018 RDK Management
 #
-# This library is free software; you can redistribute it and/or
-# modify it under the terms of the GNU Library General Public
-# License as published by the Free Software Foundation, version 2
-# of the license.
+# Copyright (C) 2021 Amlogic Corporation.
 #
-# This library is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# Library General Public License for more details.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# You should have received a copy of the GNU Library General Public
-# License along with this library; if not, write to the
-# Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
-# Boston, MA 02110-1301, USA.
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 ##########################################################################
 
 SUBDIRS = 
@@ -23,11 +22,7 @@ if ENABLE_SUBTEC
 AM_CPPFLAGS += -DENABLE_SUBTEC
 endif
 
-plugin_LTLIBRARIES = libkeyboard.la libAGMPlayer.la
-libkeyboard_la_SOURCES = keyboard.c keyboard.h
-libkeyboard_la_CFLAGS =  $(GST_CFLAGS)
-libkeyboard_la_LDFLAGS = $(GST_LIBS)
-libkeyboard_la_LIBTOOLFLAGS = --tag=disable-static
+plugin_LTLIBRARIES = libAGMPlayer.la
 
 libAGMPlayer_la_SOURCES = agmplayer.c agmplayer.h
 libAGMPlayer_la_CFLAGS =  $(GST_CFLAGS)
@@ -36,18 +31,10 @@ libAGMPlayer_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvid
                             $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
 libAGMPlayer_la_LIBTOOLFLAGS = --tag=disable-static
 
-
-bin_PROGRAMS =  AGMPlayer-sample #agmplayer
+bin_PROGRAMS =  AGMPlayer-sample
 AGMPlayer_sample_SOURCES = AGMPlayer-sample.c
 AGMPlayer_sample_LDFLAGS = -module -avoid-version
-AGMPlayer_sample_LDADD = libkeyboard.la libAGMPlayer.la
-
-#agmplayer is for debug, reserved
-#agmplayer_SOURCES = agmplayer.c
-#agmplayer_CFLAGS =  $(GST_CFLAGS)
-#agmplayer_LDFLAGS = $(GST_LIBS) -module -avoid-version
-#agmplayer_LDADD = -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0  libkeyboard.la \
-#                            $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
+AGMPlayer_sample_LDADD = libAGMPlayer.la
 
 include_HEADERS = agmplayer.h
 

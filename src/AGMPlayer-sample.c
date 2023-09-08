@@ -1,31 +1,24 @@
-/* GStreamer command line playback testing utility
+/*
+ * Copyright (C) 2021 Amlogic Corporation.
  *
- * Copyright (C) 2013-2014
- * Copyright (C) 2013
- * Copyright (C) 2015
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
- *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
- * Boston, MA 02110-1301, USA.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-//#include <locale.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
-#include "keyboard.h"
+#include <pthread.h>
 #include "agmplayer.h"
 
 typedef int bool;
@@ -42,14 +35,13 @@ typedef struct
 static FILE_LISE file_list = { {0}, 0, 0};
 
 static bool quiet = FALSE;
-static bool main_quit = FALSE;
+static bool player_quit = FALSE;
 unsigned int timer_id;
 
 static bool play_next (AGMP_HANDLE handle);
 static bool play_prev (AGMP_HANDLE handle);
 static bool agmp_timeout (void* user_data);
 static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, void* userdata);
-static void keyboard_cb (const char * key_input, void* user_data);
 
 static void
 gst_play_printf (const char * format, ...)
@@ -81,7 +73,7 @@ static bool agmp_timeout (void* user_data)
   long pos = -1, dur = -1;
   char *status;
 
-  if (main_quit)
+  if (player_quit)
   {
     return FALSE;
   }
@@ -151,7 +143,7 @@ static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, vo
         agmp_stop (handle);
         aamp_destroy_timer(timer_id);
         agmp_exit(handle);
-        main_quit=TRUE;
+        player_quit=TRUE;
       }
     break;
     case AGMP_MESSAGE_ERROR:
@@ -161,7 +153,7 @@ static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, vo
         agmp_stop (handle);
         aamp_destroy_timer(timer_id);
         agmp_exit(handle);
-        main_quit=TRUE;
+        player_quit=TRUE;
       }
     break;
     case AGMP_MESSAGE_VIDEO_UNDERFLOW:
@@ -180,11 +172,6 @@ static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, vo
       gst_print ("message AGMP_MESSAGE_MEDIA_INFO_CHANGED.....\n");
     break;
   }
-}
-
-static void restore_terminal (void)
-{
-  gst_play_kb_set_key_handler (NULL, NULL);
 }
 
 #define INPUT_MAX_LEN 1024
@@ -218,121 +205,123 @@ static void trim(char *cmd)
 #define DEBUG_TEST_CMD 0
 
 AGMP_PLAY_SPEED play_speed = AGMP_PLAY_SPEED_1;
-static void command_cb (const char * input, void* user_data)
+static void run_command (void* user_data)
 {
   double value = 0;
   AGMP_HANDLE handle = (AGMP_HANDLE) user_data;
   char cmd[INPUT_MAX_LEN] = {0};
   int x = 0, y = 0, w = 0, h = 0;
+  while (!player_quit)
+  {
+    //copy cmd and trim
+    gst_print("agmplayer> ");
+    char *ret = fgets(cmd, sizeof(cmd), stdin);
+    trim(cmd);
+    gst_print ("cmd:%s\n", cmd);
 
-  //copy cmd and trim
-  int copylen = strlen(input) < INPUT_MAX_LEN ? strlen(input) : INPUT_MAX_LEN-1;
-  strncpy(cmd, input, copylen);
-  gst_print("agmplayer>%s", input);
-  trim(cmd);
-  gst_print ("cmd:%s\n", cmd);
-
-  if (sscanf(cmd, "seek %lf", &value) >= 1)
-  {
-    agmp_seek(handle, value);
-  }
-	else if (strcmp(cmd, "stop") == 0)
-	{
-		gst_print ("\nstop............\n");
-		agmp_stop (handle);
-	}
-	else if (strcmp(cmd, "exit") == 0)
-	{
-		gst_print ("\nexit............\n");
-    /* clean up */
-    aamp_destroy_timer(timer_id);
-    agmp_exit(handle);
-		main_quit=TRUE;
-	}
-	else if (strcmp(cmd, "play") == 0)
-	{
-		gst_print ("\nplay............\n");
-		agmp_play (handle);
-	}
-	else if (strcmp(cmd, "pause") == 0)
-	{
-		gst_print ("pause\n");
-		agmp_pause (handle);
-	}
-	else if (strcmp(cmd,"next")==0)
-  {
-      play_next(handle);
-  }
-	else if (strcmp(cmd,"prev")==0)
-  {
-    play_prev(handle);
-  }
-  else if (sscanf(cmd, "vol %lf", &value) >= 1)
-  {
-    agmp_set_volume(handle, value);
-  }
-  else if (strcmp(cmd,"+")==0)
-  {
-    if (++play_speed > AGMP_PLAY_SPEED_8) {
-      play_speed = AGMP_PLAY_SPEED_8;
+    if (sscanf(cmd, "seek %lf", &value) >= 1)
+    {
+      agmp_seek(handle, value);
     }
-    agmp_set_speed(handle, play_speed);
-  }
-  else if (strcmp(cmd,"-")==0)
-  {
-    if (--play_speed < AGMP_PLAY_SPEED_1_2) {
-      play_speed = AGMP_PLAY_SPEED_1_4;
+    else if (strcmp(cmd, "stop") == 0)
+    {
+      gst_print ("\nstop............\n");
+      agmp_stop (handle);
     }
-    agmp_set_speed(handle, play_speed);
-  }
-  else if (sscanf(cmd, "atrack %lf", &value) >= 1)
-  {
-    aamp_set_audio_track(handle, value);
-  }
-  else if (sscanf(cmd, "vtrack %lf", &value) >= 1)
-  {
-  }
-  else if (sscanf(cmd, "strack %lf", &value) >= 1)
-  {
-  }
-  else if (strcmp(cmd,"0")==0)
-  {
-    agmp_stop (handle);
-    agmp_prepare(handle);
-    agmp_play (handle);
-  }
+    else if (strcmp(cmd, "exit") == 0)
+    {
+      gst_print ("\nexit............\n");
+      /* clean up */
+      aamp_destroy_timer(timer_id);
+      agmp_exit(handle);
+      player_quit=TRUE;
+      break;
+    }
+    else if (strcmp(cmd, "play") == 0)
+    {
+      gst_print ("\nplay............\n");
+      agmp_play (handle);
+    }
+    else if (strcmp(cmd, "pause") == 0)
+    {
+      gst_print ("pause\n");
+      agmp_pause (handle);
+    }
+    else if (strcmp(cmd,"next")==0)
+    {
+        play_next(handle);
+    }
+    else if (strcmp(cmd,"prev")==0)
+    {
+      play_prev(handle);
+    }
+    else if (sscanf(cmd, "vol %lf", &value) >= 1)
+    {
+      agmp_set_volume(handle, value);
+    }
+    else if (strcmp(cmd,"+")==0)
+    {
+      if (++play_speed > AGMP_PLAY_SPEED_8) {
+        play_speed = AGMP_PLAY_SPEED_8;
+      }
+      agmp_set_speed(handle, play_speed);
+    }
+    else if (strcmp(cmd,"-")==0)
+    {
+      if (--play_speed < AGMP_PLAY_SPEED_1_2) {
+        play_speed = AGMP_PLAY_SPEED_1_4;
+      }
+      agmp_set_speed(handle, play_speed);
+    }
+    else if (sscanf(cmd, "atrack %lf", &value) >= 1)
+    {
+      aamp_set_audio_track(handle, value);
+    }
+    else if (sscanf(cmd, "vtrack %lf", &value) >= 1)
+    {
+    }
+    else if (sscanf(cmd, "strack %lf", &value) >= 1)
+    {
+    }
+    else if (strcmp(cmd,"0")==0)
+    {
+      agmp_stop (handle);
+      agmp_prepare(handle);
+      agmp_play (handle);
+    }
 #if DEBUG_TEST_CMD
-  else if (strcmp(cmd,"getvol")==0)
-  {
-    gst_print ("agmp_get_volume............%f\n", agmp_get_volume(handle));
-  }
-  else if (strcmp(cmd,"getspeed")==0)
-  {
-    gst_print ("agmp_get_speed............%d\n", agmp_get_speed(handle));
-  }
-  else if (strcmp(cmd,"getwindowsize")==0)
-  {
-    agmp_get_window_size(handle, &x, &y, &w, &h);
-    gst_print ("agmp_get_window_size............[%d,%d,%d,%d]\n", x, y, w, h);
-  }
-  else if (sscanf(cmd, "zoom %lf", &value) >= 1)
-  {
-    agmp_set_zoom(handle, value);
-    gst_print ("agmp_set_zoom............[%d]\n", (int)value);
-  }
-  else if (sscanf(cmd, "vmute %lf", &value) >= 1)
-  {
-    agmp_set_video_mute(handle, value);
-    gst_print ("agmp_set_video_mute............[%d]\n", (int)value);
-  }
-  else if (sscanf(cmd, "setwindowsize %d,%d,%d,%d", &x, &y, &w, &h) >= 1)
-  {
-    agmp_set_window_size(handle, x, y, w, h);
-  }
+    else if (strcmp(cmd,"getvol")==0)
+    {
+      gst_print ("agmp_get_volume............%f\n", agmp_get_volume(handle));
+    }
+    else if (strcmp(cmd,"getspeed")==0)
+    {
+      gst_print ("agmp_get_speed............%d\n", agmp_get_speed(handle));
+    }
+    else if (strcmp(cmd,"getwindowsize")==0)
+    {
+      agmp_get_window_size(handle, &x, &y, &w, &h);
+      gst_print ("agmp_get_window_size............[%d,%d,%d,%d]\n", x, y, w, h);
+    }
+    else if (sscanf(cmd, "zoom %lf", &value) >= 1)
+    {
+      agmp_set_zoom(handle, value);
+      gst_print ("agmp_set_zoom............[%d]\n", (int)value);
+    }
+    else if (sscanf(cmd, "vmute %lf", &value) >= 1)
+    {
+      agmp_set_video_mute(handle, value);
+      gst_print ("agmp_set_video_mute............[%d]\n", (int)value);
+    }
+    else if (sscanf(cmd, "setwindowsize %d,%d,%d,%d", &x, &y, &w, &h) >= 1)
+    {
+      agmp_set_window_size(handle, x, y, w, h);
+    }
 #endif
-  else
-  {
+    else
+    {
 
+    }
   }
 }
 
@@ -376,31 +365,8 @@ static parse_param(char** args)
 
 int main (int argc, char **argv)
 {
-  bool verbose = FALSE;
-  bool print_version = FALSE;
-  bool interactive = TRUE;
-  bool gapless = FALSE;
-  bool shuffle = FALSE;
-  char **filenames = NULL;
   char license_url[1024] = {0};
-  char *playlist_file = NULL;
   int x=0, y=0, w=0, h=0;
-  /*GOptionEntry options[] = {
-    {"verbose", 'v', 0, G_OPTION_ARG_NONE, &verbose,
-        N_("Output status information and property notifications"), NULL},
-    {"version", 0, 0, G_OPTION_ARG_NONE, &print_version,
-        N_("Print version information and exit"), NULL},
-    {"shuffle", 0, 0, G_OPTION_ARG_NONE, &shuffle,
-        N_("Shuffle playlist"), NULL},
-    {"no-interactive", 0, G_OPTION_FLAG_REVERSE, G_OPTION_ARG_NONE,
-          &interactive,
-        N_("Disable interactive control via the keyboard"), NULL},
-    {"quiet", 'q', 0, G_OPTION_ARG_NONE, &quiet,
-        N_("Do not print any output (apart from errors)"), NULL},
-    {G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_FILENAME_ARRAY, &filenames, NULL},
-    {"license-url", 0, 0, G_OPTION_ARG_STRING, &license_url, N_("license-url"), NULL},
-    {NULL}
-  };*/
 
   if (argc < 2)
   {
@@ -453,15 +419,12 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if (interactive) {
-    if (gst_play_kb_set_key_handler (command_cb, handle)) {
-      gst_print ("Press 'k' to see a list of keyboard shortcuts.\n");
-      atexit (restore_terminal);
-    } else {
-      gst_print ("Interactive keyboard handling in terminal not available.\n");
-    }
+  player_quit = FALSE;
+  pthread_t cmdThreadId;
+  if (pthread_create(&cmdThreadId,NULL,run_command, handle) != 0)
+  {
+    printf("[AAMPCLI] Failed at create pthread error\n");
   }
-
   aamp_register_events(handle, agmp_message_callback, NULL);
   file_list.cur_index = 0;
   gst_print ("\n uris %s, argc:%d\n", file_list.uris[file_list.cur_index], argc);
@@ -475,12 +438,9 @@ int main (int argc, char **argv)
   /* play */
   agmp_play (handle);
 
-  main_quit = FALSE;
   gst_print ("I am main function, waitting for quit.\n");
-  while (!main_quit)
-  {
-	  sleep(1);
-  }
+  void *value_ptr = NULL;
+  pthread_join(cmdThreadId, &value_ptr);
 
   gst_print ("main function quit\n");
   return 0;

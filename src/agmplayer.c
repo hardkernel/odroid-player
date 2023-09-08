@@ -1,28 +1,21 @@
-/* GStreamer command line playback testing utility
+/*
+ * Copyright (C) 2021 Amlogic Corporation.
  *
- * Copyright (C) 2013-2014
- * Copyright (C) 2013
- * Copyright (C) 2015
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
- *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
- * Boston, MA 02110-1301, USA.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
 #include <gst/gst.h>
-#include <gst/gst-i18n-app.h>
 #include <gst/audio/audio.h>
 #include <gst/video/video.h>
 #include <gst/pbutils/pbutils.h>
@@ -435,7 +428,7 @@ AGMP_HANDLE agmp_init (void)
     playbin = gst_element_factory_make ("playbin", "playbin");
   }
   if (playbin == NULL) {
-    gst_print (_("make playbin failed.\n"));
+    gst_print ("make playbin failed.\n");
     return NULL;
   }
 
@@ -958,7 +951,7 @@ int agmp_seek(AGMP_HANDLE handle, double position)
 
   gint64 pos = GST_SECOND * position;
   if (pos > dur) {
-    gst_print ("\n%s\n", _("Reached end of play list."));
+    gst_print ("\n%s\n", "Reached end of play list.");
     agmp_stop(player);
   } else {
     if (pos < 0)
@@ -1017,7 +1010,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
         gst_print ("\n");
 
       gst_message_parse_buffering (msg, &percent);
-      gst_print ("%s %d%%  \r", _("Buffering..."), percent);
+      gst_print ("%s %d%%  \r", "Buffering...", percent);
 
       if (percent == 100) {
         // a 100% message means buffering is done
@@ -1042,7 +1035,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
       break;
     }
     case GST_MESSAGE_CLOCK_LOST:{
-      gst_print (_("Clock lost, selecting a new one\n"));
+      gst_print ("Clock lost, selecting a new one\n");
       gst_element_set_state (player->playbin, GST_STATE_PAUSED);
       gst_element_set_state (player->playbin, GST_STATE_PLAYING);
       break;
@@ -1073,7 +1066,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
       // and switch to next item in list
       /*if (!player->wait_on_eos )
       {
-          gst_print ("%s\n", _("Reached end of play list."));
+          gst_print ("%s\n", "Reached end of play list.");
           agmp_stop (player);
         }*/
 
@@ -1123,7 +1116,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
       }
       // try next item in list then
       //if (!agmp_replay (player)) {
-        //gst_print ("%s\n", _("Reached end of play list."));
+        //gst_print ("%s\n", "Reached end of play list.");
         //g_main_loop_quit (player->loop);
       //}
       //notify app
@@ -1380,7 +1373,7 @@ static void play_about_to_finish (GstElement * playbin, gpointer user_data)
 
   next_uri = play->uri;
   loc = play_uri_get_display_name (play, next_uri);
-  gst_print (_("About to finish, preparing next title: %s"), loc);
+  gst_print ("About to finish, preparing next title: %s", loc);
   gst_print ("\n");
   g_free (loc);
 
@@ -1465,11 +1458,11 @@ play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode)
 static void play_set_playback_rate (GstPlay * play, gdouble rate)
 {
   if (play_set_rate_and_trick_mode (play, rate, play->trick_mode)) {
-    gst_print (_("Playback rate: %.2f"), rate);
+    gst_print ("Playback rate: %.2f", rate);
     gst_print ("                               \n");
   } else {
     gst_print ("\n");
-    gst_print (_("Could not change playback rate to %.2f"), rate);
+    gst_print ("Could not change playback rate to %.2f", rate);
     gst_print (".\n");
   }
 }
