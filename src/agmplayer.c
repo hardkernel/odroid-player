@@ -53,7 +53,7 @@ typedef enum
 
 typedef struct
 {
-  gchar *uri;
+  const gchar *uri;
   gchar *license_url;
   AGMP_SSTATUS status;
 
@@ -132,9 +132,6 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer data);
 static int play_reset (GstPlay * player);
 static gboolean play_do_seek (GstPlay * play, gint64 pos, gdouble rate,
     GstPlayTrickMode mode);
-/* *INDENT-OFF* */
-static void gst_play_printf (const gchar * format, ...) G_GNUC_PRINTF (1, 2);
-/* *INDENT-ON* */
 static void relative_seek (GstPlay * play, gdouble percent);
 static void default_element_added(GstBin *bin, GstElement *element, gpointer user_data);
 
@@ -146,29 +143,49 @@ static int set_pipeline(GstPlay *player, gboolean use_playbin3, const gchar *fla
 static int agmp_replay (AGMP_HANDLE handle);
 static void set_aamp_state(GstPlay *player, PrivAAMPState state);
 
-static void
-gst_play_printf (const gchar * format, ...)
-{
-  gchar *str = NULL;
-  va_list args;
-  int len;
+/* log */
+enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
 
-  if (quiet)
+#define log_trace(...) log_log(LOG_TRACE, __func__, __LINE__, __VA_ARGS__)
+#define log_debug(...) log_log(LOG_DEBUG, __func__, __LINE__, __VA_ARGS__)
+#define log_info(...)  log_log(LOG_INFO,  __func__, __LINE__, __VA_ARGS__)
+#define log_warn(...)  log_log(LOG_WARN,  __func__, __LINE__, __VA_ARGS__)
+#define log_error(...) log_log(LOG_ERROR, __func__, __LINE__, __VA_ARGS__)
+#define log_fatal(...) log_log(LOG_FATAL, __func__, __LINE__, __VA_ARGS__)
+#define gst_print(...) log_log(LOG_INFO, __func__, __LINE__, __VA_ARGS__)
+
+static struct {
+  void *udata;
+  int level;
+  int quiet;
+} L = {0};
+
+static const char *level_names[] = {
+  "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
+};
+
+static void log_log(int level, const char *file, int line, const char *fmt, ...) {
+  if (level < L.level) {
     return;
+  }
+  /* Get current time */
+   struct timespec tm;
+   long second, usec;
 
-  va_start (args, format);
+   clock_gettime( CLOCK_MONOTONIC_RAW, &tm );
+   second = tm.tv_sec;
+   usec = tm.tv_nsec/1000LL;
 
-  len = g_vasprintf (&str, format, args);
-
-  va_end (args);
-
-  if (len > 0 && str != NULL)
-    gst_print ("[AGMPlayer] %s", str);
-
-  g_free (str);
+  /* Log to stderr */
+  if (!L.quiet) {
+    va_list args;
+    printf("[%ld.%06ld]: %-5s %s:%d [AGMPlayer]: ", second, usec, level_names[level], file, line);
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+    printf("\n");
+  }
 }
-
-#define gst_print gst_play_printf
 
 static void default_element_added(GstBin *bin, GstElement *element, gpointer user_data)
 {
@@ -323,7 +340,7 @@ static void audio_first_frame(gpointer user_data)
   callback_to_app(player, AGMP_MESSAGE_FIRST_AFRAME, player->userdata);
 }
 
-int agmp_set_uri(AGMP_HANDLE handle, char* uri)
+int agmp_set_uri(AGMP_HANDLE handle, const char* uri)
 {
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
@@ -455,8 +472,8 @@ AGMP_HANDLE agmp_init (void)
       g_object_set (player->playbin, "audio-sink", sink, NULL);
       g_object_set (sink, "wait-video", TRUE, NULL);
       g_object_set (sink, "a-wait-timeout", 600, NULL);
-      //g_signal_connect (sink, "underrun-callback", G_CALLBACK (audio_underflow), player);
-      //g_signal_connect (sink, "first-audio-frame-callback", G_CALLBACK(audio_first_frame), player);
+      g_signal_connect_swapped (sink, "underrun-callback", G_CALLBACK (audio_underflow), player);
+      //g_signal_connect_swapped (sink, "first-audio-frame-callback", G_CALLBACK(audio_first_frame), player);
     }
     else
       g_warning ("Couldn't create specified audio sink '%s'", audio_sink);
@@ -474,8 +491,8 @@ AGMP_HANDLE agmp_init (void)
       g_object_set (player->playbin, "video-sink", sink, NULL);
       player->vsink = sink;
       //g_object_set (player->vsink, "stop-keep-frame", TRUE, NULL);
-      //g_signal_connect (player->vsink, "buffer-underflow-callback", G_CALLBACK (video_underflow), player);
-      //g_signal_connect (player->vsink, "first-video-frame-callback", G_CALLBACK (video_first_frame), player);
+      g_signal_connect_swapped (player->vsink, "buffer-underflow-callback", G_CALLBACK (video_underflow), player);
+      g_signal_connect_swapped (player->vsink, "first-video-frame-callback", G_CALLBACK (video_first_frame), player);
     }
     else
       g_warning ("Couldn't create specified video sink '%s'", video_sink);
@@ -510,6 +527,7 @@ AGMP_HANDLE agmp_init (void)
       return NULL;
   }
 
+  L.level = LOG_DEBUG;
   return (AGMP_HANDLE)player;
 }
 
@@ -538,8 +556,9 @@ int agmp_prepare (AGMP_HANDLE handle)
   player->async_done = FALSE;
   switch (gst_element_set_state (player->playbin, GST_STATE_PAUSED)) {
   case GST_STATE_CHANGE_FAILURE:
+    gst_print ("Pipeline state change fail.\n");
     /* ignore, we should get an error message posted on the bus */
-	ret = FALSE;
+    ret = FALSE;
     break;
   case GST_STATE_CHANGE_NO_PREROLL:
     gst_print ("Pipeline is live.\n");
@@ -549,6 +568,7 @@ int agmp_prepare (AGMP_HANDLE handle)
     gst_print ("Prerolling...\r");
     break;
   default:
+    gst_print ("Pipeline to paused.\n");
     break;
   }
 
@@ -561,6 +581,11 @@ int agmp_prepare (AGMP_HANDLE handle)
   {
     usleep(100000);
     second--;
+  }
+
+  if (!second) {
+    gst_print ("prepare stream timeout.\n");
+    return AAMP_FAILED;
   }
   player->async_done = FALSE;
   player->status = AGMP_STATUS_PREPARED;
@@ -591,6 +616,7 @@ int agmp_play (AGMP_HANDLE handle)
   gst_element_set_state (player->playbin, GST_STATE_PLAYING);
   player->status = AGMP_STATUS_PLAYING;
   set_aamp_state(player, eSTATE_PLAYING);
+  return AAMP_SUCCESS;
 }
 
 int agmp_pause (AGMP_HANDLE handle)
@@ -930,12 +956,10 @@ int agmp_seek(AGMP_HANDLE handle, double position)
 {
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
-
-  gst_print("seek to %lf\n", position);
-
   GstQuery *query;
   gboolean seekable = FALSE;
 
+  gst_print("seek to %lf\n", position);
   query = gst_query_new_seeking (GST_FORMAT_TIME);
   if (!gst_element_query (player->playbin, query)) {
     gst_query_unref (query);
@@ -950,6 +974,7 @@ int agmp_seek(AGMP_HANDLE handle, double position)
     goto seek_failed;
 
   gint64 pos = GST_SECOND * position;
+
   if (pos > dur) {
     gst_print ("\n%s\n", "Reached end of play list.");
     agmp_stop(player);
@@ -962,7 +987,7 @@ int agmp_seek(AGMP_HANDLE handle, double position)
   return AAMP_SUCCESS;
 
 seek_failed:
-  gst_print ("Could not seek.\n");
+  gst_print ("Could not seek\n");
   return AAMP_FAILED;
 }
 
@@ -1006,10 +1031,12 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
     case GST_MESSAGE_BUFFERING:{
       gint percent;
 
+      gst_message_parse_buffering (msg, &percent);
+
+#if 0
       if (!player->buffering)
         gst_print ("\n");
 
-      gst_message_parse_buffering (msg, &percent);
       gst_print ("%s %d%%  \r", "Buffering...", percent);
 
       if (percent == 100) {
@@ -1028,6 +1055,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
           player->buffering = TRUE;
         }
       }
+#endif
 
       //notify app
       player->percent = percent;
@@ -1187,7 +1215,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
         val_str = g_strdup ("(no value)");
       }
 
-      gst_play_printf ("%s: %s = %s\n", obj_name, name, val_str);
+      gst_print ("%s: %s = %s\n", obj_name, name, val_str);
       g_free (obj_name);
       g_free (val_str);
       break;
@@ -1258,18 +1286,26 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
 
         if (state == GST_STATE_VOID_PENDING) {
           gst_print ("bus message status change to pending, %p\n", player->playbin);
+          GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
+              GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.pending");
         }
         else if (state == GST_STATE_NULL) {
           gst_print ("bus message status change to null, %p\n", player->playbin);
         }
         else if (state == GST_STATE_READY) {
           gst_print ("bus message status change to ready, %p\n", player->playbin);
+          GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
+              GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.ready");
         }
         else if (state == GST_STATE_PAUSED) {
           gst_print ("bus message status change to paused, %p\n", player->playbin);
+          GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
+              GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.paused");
         }
         else if (state == GST_STATE_PLAYING) {
           gst_print ("bus message status change to playing, %p\n", player->playbin);
+          GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
+              GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.playing");
         }
         callback_to_app(player, AGMP_MESSAGE_STATE_CHANGE, player->userdata);
       }

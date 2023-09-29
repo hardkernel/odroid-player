@@ -111,7 +111,7 @@ typedef void (*timeout_callback) (AGMP_HANDLE handle);
 typedef void (*message_callback) (AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, void* userdata);
 
 AGMP_HANDLE agmp_init (void);
-int agmp_set_uri(AGMP_HANDLE handle, char* uri); //called before agmp_prepare
+int agmp_set_uri(AGMP_HANDLE handle, const char* uri); //called before agmp_prepare
 int agmp_set_license_url(AGMP_HANDLE handle, char* license_url); //called before agmp_prepare if need license_url
 int agmp_set_volume(AGMP_HANDLE handle, double volume);
 double agmp_get_volume(AGMP_HANDLE handle);

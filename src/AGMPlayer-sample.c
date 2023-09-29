@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,7 +22,6 @@
 #include <pthread.h>
 #include "agmplayer.h"
 
-typedef int bool;
 #define FALSE 0
 #define TRUE 1
 
