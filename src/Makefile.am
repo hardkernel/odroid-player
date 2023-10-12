@@ -27,7 +27,7 @@ plugin_LTLIBRARIES = libAGMPlayer.la
 libAGMPlayer_la_SOURCES = agmplayer.c agmplayer.h
 libAGMPlayer_la_CFLAGS =  $(GST_CFLAGS)
 libAGMPlayer_la_LDFLAGS = $(GST_LIBS)
-libAGMPlayer_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0 \
+libAGMPlayer_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0 -lgstsecmemallocator \
                             $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
 libAGMPlayer_la_LIBTOOLFLAGS = --tag=disable-static
 

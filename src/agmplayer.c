@@ -110,6 +110,10 @@ typedef struct
   gdouble rate;
   double volume;
 
+  /* secmem */
+  GMutex lock;
+  GstAllocator* allocator;
+
   /*support aamp*/
   PrivAAMPState aamp_state;
   gboolean video_muted;
@@ -142,6 +146,8 @@ static void play_set_playback_rate (GstPlay * play, gdouble rate);
 static int set_pipeline(GstPlay *player, gboolean use_playbin3, const gchar *flags_string, char* audio_sink, char* video_sink);
 static int agmp_replay (AGMP_HANDLE handle);
 static void set_aamp_state(GstPlay *player, PrivAAMPState state);
+static GstAllocator* handle_need_allocator(GstElement *wlcdmi, gboolean is_4k, guint decoder_format, gpointer user_data);
+static void element_setup (GstElement *playbin, GstElement *element, gpointer user_data);
 
 /* log */
 enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
@@ -185,6 +191,41 @@ static void log_log(int level, const char *file, int line, const char *fmt, ...)
     va_end(args);
     printf("\n");
   }
+}
+
+static GstAllocator* handle_need_allocator(GstElement *wlcdmi, gboolean is_4k, guint decoder_format, gpointer user_data)
+{
+    GstPlay *play;
+    if (NULL == user_data)
+    {
+      gst_print ("user_data is null.\n");
+      return NULL;
+    }
+    play = (GstPlay *)user_data;
+    g_mutex_lock(&play->lock);
+    if (!play->allocator) {
+        play->allocator = gst_secmem_allocator_new(is_4k, decoder_format);
+        gst_print ("allocator new %p.\n", play->allocator);
+    }
+    g_mutex_unlock(&play->lock);
+    return play->allocator;
+}
+
+static void element_setup (GstElement *playbin, GstElement *element, gpointer user_data)
+{
+
+    GstElementFactory *f = gst_element_get_factory(element);
+    if (!f)
+        return;
+    if (!strcmp(GST_OBJECT_NAME (f), "wlcdmi")) {
+        g_signal_connect (G_OBJECT(element), "need-allocator", (GCallback) handle_need_allocator, user_data);
+        {
+          g_object_set (element, "external-allocator", TRUE, NULL);
+        }
+    } else if (!strcmp(GST_OBJECT_NAME (f), "hlsdemux")) {
+      gst_print ("use-hw-decrypt.\n");
+      g_object_set (element, "use-hw-decrypt", TRUE, NULL);
+    }
 }
 
 static void default_element_added(GstBin *bin, GstElement *element, gpointer user_data)
@@ -419,6 +460,8 @@ AGMP_HANDLE agmp_init (void)
   player->percent = 0;
   player->async_done = FALSE;
   player->aamp_state = eSTATE_IDLE;
+  g_mutex_init(&player->lock);
+  player->allocator = NULL;
 
   gboolean use_playbin3 = FALSE;
   gchar *flags_string = NULL;
@@ -451,6 +494,7 @@ AGMP_HANDLE agmp_init (void)
 
   player->playbin = playbin;
   g_signal_connect(playbin, "element-added", G_CALLBACK(default_element_added), player);
+  g_signal_connect (playbin, "element-setup", G_CALLBACK (element_setup), player);
 
   if (use_playbin3) {
     player->is_playbin3 = TRUE;
@@ -654,6 +698,10 @@ int agmp_stop (AGMP_HANDLE handle)
   }
   set_aamp_state(player, eSTATE_STOPPING);
   gst_element_set_state (player->playbin, GST_STATE_READY);
+  if (player->allocator) {
+    gst_object_unref(player->allocator);
+    player->allocator = NULL;
+  }
 
   // wait state change
   usleep(1000000);
