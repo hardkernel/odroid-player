@@ -575,19 +575,6 @@ int agmp_prepare (AGMP_HANDLE handle)
   if (!ret)
     return AAMP_FAILED;
 
-  //timeout or async-done
-  int second = 50;
-  while (!player->async_done && second > 0)
-  {
-    usleep(100000);
-    second--;
-  }
-
-  if (!second) {
-    gst_print ("prepare stream timeout.\n");
-    return AAMP_FAILED;
-  }
-  player->async_done = FALSE;
   player->status = AGMP_STATUS_PREPARED;
   gst_print ("prepare stream over.\n");
   set_aamp_state(player, eSTATE_PREPARED);
@@ -1019,7 +1006,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
       GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
           GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.async-done");
 
-      gst_print ("Prerolled.\r");
+      gst_print ("Prerolled.\n");
       if (player->missing != NULL && play_install_missing_plugins (player)) {
         gst_print ("New plugins installed, trying again...\n");
         replay (player);

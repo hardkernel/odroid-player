@@ -36,7 +36,6 @@ static FILE_LISE file_list = { {0}, 0, 0};
 
 static bool quiet = FALSE;
 static bool player_quit = FALSE;
-unsigned int timer_id;
 
 static bool play_next (AGMP_HANDLE handle);
 static bool play_prev (AGMP_HANDLE handle);
@@ -134,6 +133,7 @@ static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, vo
     case AGMP_MESSAGE_ASYNC_DONE:
     {
       gst_print ("message ASYNC_DONE.....\n");
+      collect_media_info(handle);
     }
     break;
     case AGMP_MESSAGE_EOS:
@@ -141,8 +141,6 @@ static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, vo
       if (!play_next (handle)) {
         gst_print ("reach the filelist end, stop.\n");
         agmp_stop (handle);
-        aamp_destroy_timer(timer_id);
-        agmp_exit(handle);
         player_quit=TRUE;
       }
     break;
@@ -151,8 +149,6 @@ static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, vo
       if (!play_next (handle)) {
         gst_print ("reach the filelist end, stop.\n");
         agmp_stop (handle);
-        aamp_destroy_timer(timer_id);
-        agmp_exit(handle);
         player_quit=TRUE;
       }
     break;
@@ -232,8 +228,6 @@ static void run_command (void* user_data)
     {
       gst_print ("\nexit............\n");
       /* clean up */
-      aamp_destroy_timer(timer_id);
-      agmp_exit(handle);
       player_quit=TRUE;
       break;
     }
@@ -432,8 +426,8 @@ int main (int argc, char **argv)
   agmp_set_license_url(handle, license_url);
   agmp_set_window_size(handle, x, y, w, h);
   agmp_prepare(handle);
-  collect_media_info(handle);
 
+  unsigned int timer_id;
   timer_id = aamp_create_timer(100, agmp_timeout, handle);
   /* play */
   agmp_play (handle);
@@ -441,6 +435,9 @@ int main (int argc, char **argv)
   gst_print ("I am main function, waitting for quit.\n");
   void *value_ptr = NULL;
   pthread_join(cmdThreadId, &value_ptr);
+  /* clean up */
+  aamp_destroy_timer(timer_id);
+  agmp_exit(handle);
 
   gst_print ("main function quit\n");
   return 0;
