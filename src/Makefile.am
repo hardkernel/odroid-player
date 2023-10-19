@@ -22,7 +22,7 @@ if ENABLE_SUBTEC
 AM_CPPFLAGS += -DENABLE_SUBTEC
 endif
 
-plugin_LTLIBRARIES = libAGMPlayer.la
+plugin_LTLIBRARIES = libAGMPlayer.la libAGMPlayerEs.la
 
 libAGMPlayer_la_SOURCES = agmplayer.c agmplayer.h
 libAGMPlayer_la_CFLAGS =  $(GST_CFLAGS)
@@ -31,12 +31,35 @@ libAGMPlayer_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvid
                             $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
 libAGMPlayer_la_LIBTOOLFLAGS = --tag=disable-static
 
+libAGMPlayerEs_la_SOURCES = agmplayer_es.c agmplayer_es.h \
+                            agmplayer_es_video_color_metadata.c agmplayer_es_video_color_metadata.h agmplayer_es_video_color_metadata_internal.h\
+                            agmplayer_es_cfgs.h \
+                            agmplayer_es_commons.h \
+                            agmplayer_es_infos.h \
+                            agmplayer_es_msgs.h \
+                            agmplayer_es_types.h \
+                            # agmplayer_es_secure.c agmplayer_es_secure.h
+
+libAGMPlayerEs_la_CFLAGS =  $(GST_CFLAGS)
+libAGMPlayerEs_la_LDFLAGS = $(GST_LIBS)
+libAGMPlayerEs_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0 -lgstsecmemallocator \
+                            $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
+libAGMPlayer_la_LIBTOOLFLAGS = --tag=disable-static
+
 bin_PROGRAMS =  AGMPlayer-sample
 AGMPlayer_sample_SOURCES = AGMPlayer-sample.c
 AGMPlayer_sample_LDFLAGS = -module -avoid-version
 AGMPlayer_sample_LDADD = libAGMPlayer.la
 
-include_HEADERS = agmplayer.h
+include_HEADERS = agmplayer.h \
+                  agmplayer_es.h \
+                  agmplayer_es_types.h \
+                  agmplayer_es_commons.h \
+                  agmplayer_es_video_color_metadata.h \
+                  agmplayer_es_infos.h \
+                  agmplayer_es_msgs.h \
+                  agmplayer_es_cfgs.h \
+                #   agmplayer_es_secure.h
 
 
 
