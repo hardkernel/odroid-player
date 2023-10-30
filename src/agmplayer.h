@@ -58,7 +58,19 @@ typedef enum
   AGMP_MESSAGE_MEDIA_INFO_CHANGED,
   AGMP_MESSAGE_STATE_CHANGE,
   AGMP_MESSAGE_AAMP_STATE_CHANGE,//support aamp
+  AGMP_MESSAGE_PROGRESS_UPDATE,
 } AGMP_MESSAGE_TYPE;
+
+/* log */
+typedef enum
+{
+  LOG_TRACE,
+  LOG_DEBUG,
+  LOG_INFO,
+  LOG_WARN,
+  LOG_ERROR,
+  LOG_FATAL,
+} LOG_LEVEL;
 
 typedef enum
 {
@@ -129,8 +141,6 @@ int agmp_seek(AGMP_HANDLE handle, double position);
 AGMP_SSTATUS agmp_get_state(AGMP_HANDLE handle);
 
 
-unsigned int aamp_create_timer(unsigned int interval, timeout_callback callback, AGMP_HANDLE handle);
-void aamp_destroy_timer(unsigned int timer_id);
 int aamp_register_events(AGMP_HANDLE handle, message_callback callback, void* userdata);
 void agmp_deinit (AGMP_HANDLE handle);
 
@@ -143,6 +153,8 @@ int aamp_get_audio_track_info(AGMP_HANDLE handle, int trackid, AudioInfo* audio_
 int aamp_get_text_track_info(AGMP_HANDLE handle, int trackid, TextInfo* text_info);
 int aamp_set_audio_track(AGMP_HANDLE handle, int trackid);
 int agmp_get_buffering_percent(AGMP_HANDLE handle);
+int agmp_set_log_level (LOG_LEVEL level);
+
 /* support aamp */
 unsigned int agmp_get_aamp_state(AGMP_HANDLE handle);
 int agmp_set_zoom(AGMP_HANDLE handle, int zoom);

@@ -23,6 +23,8 @@
 #include <gst/math-compat.h>
 #include "agmplayer.h"
 
+#define PROGRESS_CALLBACK_CNT 10
+
 typedef struct
 {
   int x;
@@ -87,6 +89,8 @@ typedef struct
   GMainLoop *loop;
   guint bus_watch;
   GThread *play_thread;
+  unsigned int timer_id;
+  int timer_cnt;
   message_callback notify_app;
   WindowSize win_size;
   int percent;
@@ -148,9 +152,8 @@ static int agmp_replay (AGMP_HANDLE handle);
 static void set_aamp_state(GstPlay *player, PrivAAMPState state);
 static GstAllocator* handle_need_allocator(GstElement *wlcdmi, gboolean is_4k, guint decoder_format, gpointer user_data);
 static void element_setup (GstElement *playbin, GstElement *element, gpointer user_data);
+static int porting_timeout (void* handle);
 
-/* log */
-enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
 
 #define log_trace(...) log_log(LOG_TRACE, __func__, __LINE__, __VA_ARGS__)
 #define log_debug(...) log_log(LOG_DEBUG, __func__, __LINE__, __VA_ARGS__)
@@ -430,6 +433,11 @@ static gpointer play_run_thread(gpointer data)
   return NULL;
 }
 
+int agmp_set_log_level (LOG_LEVEL level)
+{
+  L.level = level;
+}
+
 AGMP_HANDLE agmp_init (void)
 {
   int argc = 0;
@@ -586,6 +594,9 @@ AGMP_HANDLE agmp_init (void)
       return NULL;
   }
 
+  player->timer_id = g_timeout_add (100, porting_timeout, player);
+  player->timer_cnt = PROGRESS_CALLBACK_CNT;
+
   L.level = LOG_DEBUG;
   return (AGMP_HANDLE)player;
 }
@@ -660,8 +671,6 @@ int agmp_play (AGMP_HANDLE handle)
 
   player->desired_state = GST_STATE_PLAYING;
   gst_element_set_state (player->playbin, GST_STATE_PLAYING);
-  player->status = AGMP_STATUS_PLAYING;
-  set_aamp_state(player, eSTATE_PLAYING);
   return AAMP_SUCCESS;
 }
 
@@ -689,8 +698,6 @@ int agmp_pause (AGMP_HANDLE handle)
 
   player->desired_state = GST_STATE_PAUSED;
   gst_element_set_state (player->playbin, GST_STATE_PAUSED);
-  player->status = AGMP_STATUS_PAUSED;
-  set_aamp_state(player, eSTATE_PAUSED);
 
   return AAMP_SUCCESS;
 }
@@ -747,6 +754,7 @@ int agmp_exit (AGMP_HANDLE handle)
   quit_loop(player);
   agmp_deinit(handle);
   quit_thread(player);
+  g_source_remove (player->timer_id);
   g_free (player);
   player = NULL;
   //gst_deinit();
@@ -1350,11 +1358,15 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
           gst_print ("bus message status change to paused, %p\n", player->playbin);
           GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
               GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.paused");
+          player->status = AGMP_STATUS_PAUSED;
+          set_aamp_state(player, eSTATE_PAUSED);
         }
         else if (state == GST_STATE_PLAYING) {
           gst_print ("bus message status change to playing, %p\n", player->playbin);
           GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
               GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.playing");
+          player->status = AGMP_STATUS_PLAYING;
+          set_aamp_state(player, eSTATE_PLAYING);
         }
         callback_to_app(player, AGMP_MESSAGE_STATE_CHANGE, player->userdata);
       }
@@ -2102,6 +2114,7 @@ static int porting_timeout (void* handle)
   dur = agmp_get_duration(handle);
   pos = agmp_get_position(handle);
 
+  player->timer_cnt++;
   if (pos >= 0 && dur > 0) {
     gchar dstr[32], pstr[32];
 
@@ -2110,21 +2123,18 @@ static int porting_timeout (void* handle)
     pstr[9] = '\0';
     g_snprintf (dstr, 32, "%" GST_TIME_FORMAT, GST_TIME_ARGS (dur));
     dstr[9] = '\0';
-    gst_print ("%s / %s\r", pstr, dstr);
+    log_trace ("%s / %s\r", pstr, dstr);
+
+    // progress update call back
+    if (player->timer_cnt >= PROGRESS_CALLBACK_CNT) {
+      player->timer_cnt = 0;
+      callback_to_app(player, AGMP_MESSAGE_PROGRESS_UPDATE, player->userdata);
+    }
   }
 
   return TRUE;
 }
 
-unsigned int aamp_create_timer(unsigned int interval, timeout_callback callback, AGMP_HANDLE handle)
-{
-	return g_timeout_add (interval, porting_timeout, handle);
-}
-
-void aamp_destroy_timer(unsigned int timer_id)
-{
-	g_source_remove (timer_id);
-}
 
 int aamp_register_events(AGMP_HANDLE handle, message_callback callback, void* userdata)
 {

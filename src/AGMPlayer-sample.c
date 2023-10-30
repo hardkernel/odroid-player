@@ -39,7 +39,6 @@ static bool player_quit = FALSE;
 
 static bool play_next (AGMP_HANDLE handle);
 static bool play_prev (AGMP_HANDLE handle);
-static bool agmp_timeout (void* user_data);
 static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, void* userdata);
 
 static void
@@ -66,32 +65,6 @@ gst_play_printf (const char * format, ...)
 
 #define gst_print gst_play_printf
 #define SECOND (1000)
-static bool agmp_timeout (void* user_data)
-{
-  AGMP_HANDLE handle = user_data;
-  long pos = -1, dur = -1;
-  char *status;
-
-  if (player_quit)
-  {
-    return FALSE;
-  }
-  dur = agmp_get_duration(handle);
-  pos = agmp_get_position(handle);
-
-  if (pos >= 0 && dur > 0) {
-    char dstr[32], pstr[32];
-
-    /* FIXME: pretty print in nicer format */
-    snprintf (pstr, 32, "%ld:%02ld:%02ld.%03ld", pos/SECOND/3600, pos/SECOND/60%60, pos/SECOND%60, pos%SECOND);
-    pstr[12] = '\0';
-    snprintf (dstr, 32, "%ld:%02ld:%02ld.%03ld", dur/SECOND/3600, dur/SECOND/60%60, dur/SECOND%60, dur%SECOND);
-    dstr[12] = '\0';
-    gst_print ("%s / %s\r", pstr, dstr);
-  }
-
-  return TRUE;
-}
 
 static void collect_media_info(AGMP_HANDLE handle)
 {
@@ -412,6 +385,7 @@ int main (int argc, char **argv)
         ("Failed to create 'playbin' element. Check your GStreamer installation.\n");
     return EXIT_FAILURE;
   }
+  agmp_set_log_level(LOG_TRACE);
 
   player_quit = FALSE;
   pthread_t cmdThreadId;
@@ -427,8 +401,6 @@ int main (int argc, char **argv)
   agmp_set_window_size(handle, x, y, w, h);
   agmp_prepare(handle);
 
-  unsigned int timer_id;
-  timer_id = aamp_create_timer(100, agmp_timeout, handle);
   /* play */
   agmp_play (handle);
 
@@ -436,7 +408,6 @@ int main (int argc, char **argv)
   void *value_ptr = NULL;
   pthread_join(cmdThreadId, &value_ptr);
   /* clean up */
-  aamp_destroy_timer(timer_id);
   agmp_exit(handle);
 
   gst_print ("main function quit\n");
