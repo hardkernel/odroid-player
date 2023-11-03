@@ -244,27 +244,42 @@ static void default_element_added(GstBin *bin, GstElement *element, gpointer use
 
   if (g_strrstr(GST_ELEMENT_NAME(element), "uridecodebin"))
   {
-      g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      if (play->uridb != element)
+      {
+          g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      }
       play->uridb = element;
   }
   else if (g_strrstr(GST_ELEMENT_NAME(element), "decodebin"))
   {
-      g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      if (play->db != element)
+      {
+          g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      }
       play->db = element;
   }
   else if (g_strrstr(GST_ELEMENT_NAME(element), "parsebin"))
   {
-      g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      if (play->pb != element)
+      {
+          g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      }
       play->pb = element;
   }
   else if (g_strrstr(GST_ELEMENT_NAME(element), "vbin"))
   {
-      g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      if (play->vbin != element)
+      {
+          g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      }
       play->vbin = element;
   }
   else if (g_strrstr(GST_ELEMENT_NAME(element), "abin"))
   {
-      g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      if (play->abin != element)
+      {
+          g_signal_connect(element, "element-added", G_CALLBACK(default_element_added), play);
+      }
       play->abin = element;
   }
   else if (g_strrstr(GST_ELEMENT_NAME(element), "demux"))
@@ -1043,7 +1058,6 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
   GstPlay *player = user_data;
 
   if (player == NULL) {
-    gst_message_ref (msg);
     return TRUE;
   }
 
@@ -1357,7 +1371,6 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
       }*/
       break;
   }
-  gst_message_ref (msg);
 
   return TRUE;
 }
