@@ -1,0 +1,14 @@
+Source: agmplayer
+Priority: optional
+Maintainer: Dongjin Kim <tobetter@gmail.com>
+Uploaders: Dongjin Kim <tobetter@gmail.com>
+Build-Depends: pkg-config, debhelper-compat (= 13),
+  libgstreamer1.0-dev
+Standards-Version: 4.6.0
+
+Package: agmplayer
+Section: misc
+Architecture: linux-any
+Depends: ${misc:Depends}
+Multi-Arch: same
+Description: ...

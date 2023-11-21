@@ -1,0 +1,23 @@
+diff --git a/configure.ac b/configure.ac
+index b61e381..bb07a77 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -86,7 +86,6 @@ AC_ARG_ENABLE(gstreamer1,
+                              [Use GStreamer 1.x]), ,
+               [enable_gstreamer1=auto])
+ 
+-ENABLE_SUBTEC = false
+ AC_ARG_ENABLE([subtec],
+               AS_HELP_STRING([--enable-subtec],[enable subtec filter + sink (default is no)]),
+               [
+@@ -115,8 +115,8 @@ AS_IF([test "x$enable_gstreamer1" = "xyes" -a "x$have_gst1" != "xyes"], [
+ $GST_PKG_ERRORS])], [])
+ 
+ AS_IF([test "x$have_gst1" != "xyes"], [
+-  GST_MAJORMINOR=0.10
+-  PKG_CHECK_MODULES([GST], [gstreamer-0.10 >= 0.10.28])
++  GST_MAJORMINOR=1.0
++  PKG_CHECK_MODULES([GST], [gstreamer-1.0 >= 1.20])
+ ], [])
+ 
+ plugindir="\$(libdir)/"
