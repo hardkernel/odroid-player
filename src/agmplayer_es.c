@@ -944,6 +944,11 @@ void _agmp_es_deinit(AgmpEsCtxt *ctxt)
 
     if (ctxt)
     {
+        if (ctxt->data_ctl_thread)
+        {
+            ctxt->quit_data_ctl = TRUE;
+            g_thread_join(ctxt->data_ctl_thread);
+        }
         if (ctxt->player_status_monitor)
         {
             g_source_destroy(ctxt->player_status_monitor);
@@ -1006,11 +1011,6 @@ void _agmp_es_deinit(AgmpEsCtxt *ctxt)
             g_source_remove(ctxt->bus_watch);
         if (ctxt->msg_thread)
             g_thread_join(ctxt->msg_thread);
-        if (ctxt->data_ctl_thread)
-        {
-            ctxt->quit_data_ctl = TRUE;
-            g_thread_join(ctxt->data_ctl_thread);
-        }
         if (ctxt->main_loop_context)
             g_main_context_unref(ctxt->main_loop_context);
         if (ctxt->main_loop)
