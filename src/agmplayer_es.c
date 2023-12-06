@@ -946,6 +946,9 @@ void _agmp_es_deinit(AgmpEsCtxt *ctxt)
     {
         if (ctxt->data_ctl_thread)
         {
+            if (ctxt->pipeline)
+                _agmp_es_set_pipeline_state(ctxt, GST_STATE_NULL);
+
             ctxt->quit_data_ctl = TRUE;
             g_thread_join(ctxt->data_ctl_thread);
         }
