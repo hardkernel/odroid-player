@@ -403,7 +403,7 @@ int agmp_set_uri(AGMP_HANDLE handle, const char* uri)
 {
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
-  player->uri = uri;
+  player->uri = g_strdup (uri);
   return AAMP_SUCCESS;
 }
 
@@ -787,10 +787,14 @@ void agmp_deinit (AGMP_HANDLE handle)
 
   if (player->collection)
     gst_object_unref (player->collection);
-  g_free (player->cur_audio_sid);
-  g_free (player->cur_video_sid);
-  g_free (player->cur_text_sid);
-
+  if (player->cur_audio_sid != NULL)
+    g_free (player->cur_audio_sid);
+  if (player->cur_video_sid != NULL)
+    g_free (player->cur_video_sid);
+  if (player->cur_text_sid != NULL)
+    g_free (player->cur_text_sid);
+  if (player->uri != NULL)
+    g_free (player->uri);
   g_mutex_clear (&player->selection_lock);
 
 }
