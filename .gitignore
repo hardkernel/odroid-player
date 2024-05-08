@@ -1,0 +1,15 @@
+# git ignore for the autoconf and automake relative temp files
+# *.o and *.so should not added here
+oe-logs
+oe-workdir
+
+build-aux/
+m4/
+
+COPYING
+INSTALL
+Makefile.in
+autom4te.cache/
+config.h.in
+config.h.in~
+configure

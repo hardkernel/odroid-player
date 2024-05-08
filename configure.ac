@@ -22,6 +22,29 @@ dnl AC_PREREQ([2.69])
 AC_INIT(agmplayer, version-1.0)
 AC_CONFIG_SRCDIR([src])
 
+#get OUT_DIR
+AC_ARG_WITH([path], [AS_HELP_STRING([--with-path=PATH], [specify path])])
+if test "x$with_path" != "x"; then
+    OUT_DIR=$with_path
+else
+    OUT_DIR=.
+fi
+echo "OUT_DIR = $OUT_DIR"
+
+#check aml_version.h file, if not exist, copy from aml_version.h.in
+if test -e "$OUT_DIR/aml_version.h"; then
+    AC_MSG_RESULT([$OUT_DIR/aml_version.h file already exist])
+else
+    AC_MSG_RESULT(create [$OUT_DIR/aml_version.h from $srcdir/src/aml_version.h.in])
+    AC_MSG_NOTICE([Source directory: $srcdir])
+    AC_MSG_NOTICE([OUT_DIR directory: $OUT_DIR])
+    mkdir -p $OUT_DIR/src/
+    cp $srcdir/aml_version.h.in $OUT_DIR/aml_version.h
+fi
+
+AC_CONFIG_AUX_DIR([build-aux])
+AC_CONFIG_MACRO_DIR([m4])
+
 AM_INIT_AUTOMAKE([foreign no-dist-gzip dist-bzip2 1.9])
 LT_INIT
 
