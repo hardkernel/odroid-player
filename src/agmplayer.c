@@ -53,6 +53,22 @@ typedef enum
 	eSTATE_BLOCKED       /**< 14 - Player has blocked and cant play content*/
 } PrivAAMPState;
 
+typedef enum {
+  GST_PLAY_FLAG_VIDEO         = (1 << 0),
+  GST_PLAY_FLAG_AUDIO         = (1 << 1),
+  GST_PLAY_FLAG_TEXT          = (1 << 2),
+  GST_PLAY_FLAG_VIS           = (1 << 3),
+  GST_PLAY_FLAG_SOFT_VOLUME   = (1 << 4),
+  GST_PLAY_FLAG_NATIVE_AUDIO  = (1 << 5),
+  GST_PLAY_FLAG_NATIVE_VIDEO  = (1 << 6),
+  GST_PLAY_FLAG_DOWNLOAD      = (1 << 7),
+  GST_PLAY_FLAG_BUFFERING     = (1 << 8),
+  GST_PLAY_FLAG_DEINTERLACE   = (1 << 9),
+  GST_PLAY_FLAG_SOFT_COLORBALANCE = (1 << 10),
+  GST_PLAY_FLAG_FORCE_FILTERS = (1 << 11),
+  GST_PLAY_FLAG_FORCE_SW_DECODERS = (1 << 12),
+} GstPlayFlags;
+
 typedef struct
 {
   const gchar *uri;
@@ -578,6 +594,12 @@ AGMP_HANDLE agmp_init (void)
     else
       gst_printerr ("Couldn't convert '%s' to playbin flags!\n", flags_string);
     g_value_unset (&val);
+  }
+  else
+  {
+    gint default_flags = GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_TEXT | GST_PLAY_FLAG_NATIVE_VIDEO;
+    g_object_set(player->playbin, "flags", default_flags, NULL);
+    g_warning ("set default flag 0x%x", default_flags);
   }
 
   /*if (verbose) {
