@@ -25,6 +25,9 @@
 
 #define PROGRESS_CALLBACK_CNT 10
 
+GST_DEBUG_CATEGORY (agmp_debug);
+#define GST_CAT_DEFAULT agmp_debug
+
 typedef struct
 {
   int x;
@@ -461,6 +464,9 @@ AGMP_HANDLE agmp_init (void)
   char **argv = NULL;
   gst_init(&argc, &argv);
 
+  GST_DEBUG_CATEGORY_INIT (agmp_debug, "agmp", 0, "amlogic gstreamer media player");
+  GST_TRACE("trace in");
+
   GstPlay *player;
 
   player = g_new0 (GstPlay, 1);
@@ -626,6 +632,8 @@ AGMP_HANDLE agmp_init (void)
 
 int agmp_prepare (AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -676,6 +684,8 @@ int agmp_prepare (AGMP_HANDLE handle)
 
 int agmp_play (AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -699,6 +709,8 @@ int agmp_play (AGMP_HANDLE handle)
 
 int agmp_pause (AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -727,6 +739,8 @@ int agmp_pause (AGMP_HANDLE handle)
 
 int agmp_stop (AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -756,6 +770,8 @@ int agmp_stop (AGMP_HANDLE handle)
 
 void quit_thread(GstPlay* player)
 {
+  GST_TRACE("trace in");
+
   if (player->play_thread) {
     gst_print ("\njoin thread\n");
     g_thread_join (player->play_thread);
@@ -765,11 +781,15 @@ void quit_thread(GstPlay* player)
 
 void quit_loop(GstPlay* player)
 {
-	g_main_loop_quit (player->loop);
+  GST_TRACE("trace in");
+
+  g_main_loop_quit (player->loop);
 }
 
 int agmp_exit (AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   set_aamp_state(player, eSTATE_RELEASED);
@@ -787,6 +807,8 @@ int agmp_exit (AGMP_HANDLE handle)
 
 void agmp_deinit (AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -824,6 +846,8 @@ void agmp_deinit (AGMP_HANDLE handle)
 
 AGMP_SSTATUS agmp_get_state(AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   return player->status;
@@ -831,6 +855,8 @@ AGMP_SSTATUS agmp_get_state(AGMP_HANDLE handle)
 
 unsigned int agmp_get_aamp_state(AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   if (NULL == handle) {
     return eSTATE_IDLE;
   }
@@ -840,6 +866,8 @@ unsigned int agmp_get_aamp_state(AGMP_HANDLE handle)
 
 static void set_aamp_state(GstPlay *player, PrivAAMPState state)
 {
+  GST_TRACE("trace in");
+
   if (NULL == player) {
     return;
   }
@@ -883,6 +911,8 @@ long long agmp_get_duration(AGMP_HANDLE handle)
 
 int agmp_set_speed(AGMP_HANDLE handle, AGMP_PLAY_SPEED rate)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -915,6 +945,8 @@ int agmp_set_speed(AGMP_HANDLE handle, AGMP_PLAY_SPEED rate)
 
 int agmp_get_speed(AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   return player->rate;
@@ -923,6 +955,8 @@ int agmp_get_speed(AGMP_HANDLE handle)
 /* reset for new file/stream */
 static int play_reset (GstPlay * player)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(player);
 
   g_list_foreach (player->missing, (GFunc) gst_message_unref, NULL);
@@ -945,6 +979,8 @@ play_install_missing_plugins (GstPlay * play)
 
 int agmp_replay (AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -972,21 +1008,29 @@ int agmp_replay (AGMP_HANDLE handle)
 
 int aamp_set_audio_track(AGMP_HANDLE handle, int trackid)
 {
+  GST_TRACE("trace in");
+
   play_track_selection (handle, GST_PLAY_TRACK_TYPE_AUDIO, (gint)trackid);
 }
 
 int set_video_track(AGMP_HANDLE handle, int trackid)
 {
+  GST_TRACE("trace in");
+
   play_track_selection (handle, GST_PLAY_TRACK_TYPE_AUDIO, (gint)trackid);
 }
 
 int set_subtitle_track(AGMP_HANDLE handle, int trackid)
 {
+  GST_TRACE("trace in");
+
   play_track_selection (handle, GST_PLAY_TRACK_TYPE_AUDIO, (gint)trackid);
 }
 
 int get_audio_track_num(GstPlay * player)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(player);
   /* playbin3 variables */
   gint nb_audio = 0, nb_video = 0, nb_text = 0;
@@ -1039,6 +1083,8 @@ int get_audio_track_num(GstPlay * player)
 
 int agmp_seek(AGMP_HANDLE handle, double position)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   GstQuery *query;
@@ -1083,6 +1129,8 @@ seek_failed:
 
 int agmp_get_buffering_percent(AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   return player->percent;
@@ -1416,6 +1464,8 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
 
 int agmp_set_volume(AGMP_HANDLE handle, double volume)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -1446,6 +1496,8 @@ int agmp_set_volume(AGMP_HANDLE handle, double volume)
 
 double agmp_get_volume(AGMP_HANDLE handle)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   return player->volume * 100;
@@ -1453,6 +1505,8 @@ double agmp_get_volume(AGMP_HANDLE handle)
 
 int agmp_set_video_mute(AGMP_HANDLE handle, int mute)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   player->video_muted = mute;
@@ -1510,6 +1564,8 @@ play_set_rate_and_trick_mode (GstPlay * play, gdouble rate,
 {
   gint64 pos = -1;
 
+  GST_TRACE("trace in");
+
   g_return_val_if_fail (rate != 0, FALSE);
 
   if (!gst_element_query_position (play->playbin, GST_FORMAT_TIME, &pos))
@@ -1525,6 +1581,8 @@ play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode)
   GstQuery *query;
   GstEvent *seek;
   gboolean seekable = FALSE;
+
+  GST_TRACE("trace in");
 
   query = gst_query_new_seeking (GST_FORMAT_TIME);
   if (!gst_element_query (play->playbin, query)) {
@@ -1580,6 +1638,8 @@ play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode)
 
 static void play_set_playback_rate (GstPlay * play, gdouble rate)
 {
+  GST_TRACE("trace in");
+
   if (play_set_rate_and_trick_mode (play, rate, play->trick_mode)) {
     gst_print ("Playback rate: %.2f", rate);
     gst_print ("                               \n");
@@ -1592,6 +1652,8 @@ static void play_set_playback_rate (GstPlay * play, gdouble rate)
 
 static const gchar *trick_mode_get_description (GstPlayTrickMode mode)
 {
+  GST_TRACE("trace in");
+
   switch (mode) {
     case GST_PLAY_TRICK_MODE_NONE:
       return "normal playback, trick modes disabled";
@@ -1614,6 +1676,8 @@ void aamp_switch_trick_mode (GstPlay * play)
   GstPlayTrickMode new_mode = ++play->trick_mode;
   const gchar *mode_desc;
 
+  GST_TRACE("trace in");
+
   if (new_mode == GST_PLAY_TRICK_MODE_LAST)
     new_mode = GST_PLAY_TRICK_MODE_NONE;
 
@@ -1633,6 +1697,8 @@ play_get_nth_stream_in_collection (GstPlay * play, guint index,
 {
   guint len, i, n_streams = 0;
   GstStreamType target_type;
+
+  GST_TRACE("trace in");
 
   switch (track_type) {
     case GST_PLAY_TRACK_TYPE_AUDIO:
@@ -1670,6 +1736,8 @@ static void play_track_selection (GstPlay * play, GstPlayTrackType track_type, g
   const gchar *prop_cur, *prop_n, *prop_get, *name;
   gint n = -1;
   guint flag, cur_flags;
+
+  GST_TRACE("trace in");
 
   CHECK_POINTER_VALID(play);
   /* playbin3 variables */
@@ -1854,6 +1922,8 @@ int aamp_get_media_track_num(AGMP_HANDLE handle, int* pn_video, int* pn_audio, i
 {
   gint n_video, n_audio, n_text;
 
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   CHECK_POINTER_VALID(pn_video);
   CHECK_POINTER_VALID(pn_audio);
@@ -1874,6 +1944,8 @@ int aamp_get_media_track_num(AGMP_HANDLE handle, int* pn_video, int* pn_audio, i
 
 int aamp_get_video_track_info(AGMP_HANDLE handle, int track_id, VideoInfo* video_info)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   CHECK_POINTER_VALID(video_info);
   GstPlay* play = (GstPlay*)handle;
@@ -1931,6 +2003,8 @@ int aamp_get_video_track_info(AGMP_HANDLE handle, int track_id, VideoInfo* video
 
 int aamp_get_audio_track_info(AGMP_HANDLE handle, int track_id, AudioInfo* audio_info)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   CHECK_POINTER_VALID(audio_info);
   GstPlay* play = (GstPlay*)handle;
@@ -2001,6 +2075,8 @@ int aamp_get_audio_track_info(AGMP_HANDLE handle, int track_id, AudioInfo* audio
 
 int aamp_get_text_track_info(AGMP_HANDLE handle, int track_id, TextInfo* text_info)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   CHECK_POINTER_VALID(text_info);
   GstPlay* play = (GstPlay*)handle;
@@ -2049,6 +2125,8 @@ int aamp_get_text_track_info(AGMP_HANDLE handle, int track_id, TextInfo* text_in
 
 int agmp_set_window_size(AGMP_HANDLE handle, int x, int y, int w, int h)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -2076,6 +2154,8 @@ int agmp_set_window_size(AGMP_HANDLE handle, int x, int y, int w, int h)
 
 int agmp_get_window_size(AGMP_HANDLE handle, int* x, int* y, int* w, int* h)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -2088,6 +2168,8 @@ int agmp_get_window_size(AGMP_HANDLE handle, int* x, int* y, int* w, int* h)
 
 int agmp_set_zoom(AGMP_HANDLE handle, int zoom)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
   if (!player->vsink)
@@ -2165,6 +2247,8 @@ static int porting_timeout (void* handle)
 
 int aamp_register_events(AGMP_HANDLE handle, message_callback callback, void* userdata)
 {
+  GST_TRACE("trace in");
+
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
