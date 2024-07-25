@@ -21,6 +21,7 @@
 #include <gst/pbutils/pbutils.h>
 #include <gst/tag/tag.h>
 #include <gst/math-compat.h>
+#include <gst/allocators/gstsecmemallocator.h>
 #include "agmplayer.h"
 
 #define PROGRESS_CALLBACK_CNT 10
@@ -39,21 +40,21 @@ typedef struct
 /* PrivAAMPState is for aamp*/
 typedef enum
 {
-	eSTATE_IDLE,         /**< 0  - Player is idle */
-	eSTATE_INITIALIZING, /**< 1  - Player is initializing a particular content */
-	eSTATE_INITIALIZED,  /**< 2  - Player has initialized for a content successfully */
-	eSTATE_PREPARING,    /**< 3  - Player is loading all associated resources */
-	eSTATE_PREPARED,     /**< 4  - Player has loaded all associated resources successfully */
-	eSTATE_BUFFERING,    /**< 5  - Player is in buffering state */
-	eSTATE_PAUSED,       /**< 6  - Playback is paused */
-	eSTATE_SEEKING,      /**< 7  - Seek is in progress */
-	eSTATE_PLAYING,      /**< 8  - Playback is in progress */
-	eSTATE_STOPPING,     /**< 9  - Player is stopping the playback */
-	eSTATE_STOPPED,      /**< 10 - Player has stopped playback successfully */
-	eSTATE_COMPLETE,     /**< 11 - Playback completed */
-	eSTATE_ERROR,        /**< 12 - Error encountered and playback stopped */
-	eSTATE_RELEASED,     /**< 13 - Player has released all resources for playback */
-	eSTATE_BLOCKED       /**< 14 - Player has blocked and cant play content*/
+  eSTATE_IDLE,         /**< 0  - Player is idle */
+  eSTATE_INITIALIZING, /**< 1  - Player is initializing a particular content */
+  eSTATE_INITIALIZED,  /**< 2  - Player has initialized for a content successfully */
+  eSTATE_PREPARING,    /**< 3  - Player is loading all associated resources */
+  eSTATE_PREPARED,     /**< 4  - Player has loaded all associated resources successfully */
+  eSTATE_BUFFERING,    /**< 5  - Player is in buffering state */
+  eSTATE_PAUSED,       /**< 6  - Playback is paused */
+  eSTATE_SEEKING,      /**< 7  - Seek is in progress */
+  eSTATE_PLAYING,      /**< 8  - Playback is in progress */
+  eSTATE_STOPPING,     /**< 9  - Player is stopping the playback */
+  eSTATE_STOPPED,      /**< 10 - Player has stopped playback successfully */
+  eSTATE_COMPLETE,     /**< 11 - Playback completed */
+  eSTATE_ERROR,        /**< 12 - Error encountered and playback stopped */
+  eSTATE_RELEASED,     /**< 13 - Player has released all resources for playback */
+  eSTATE_BLOCKED       /**< 14 - Player has blocked and cant play content*/
 } PrivAAMPState;
 
 typedef enum {
@@ -74,7 +75,7 @@ typedef enum {
 
 typedef struct
 {
-  const gchar *uri;
+  gchar *uri;
   gchar *license_url;
   AGMP_SSTATUS status;
 
@@ -115,15 +116,10 @@ typedef struct
   int percent;
   gboolean async_done;
 
-  /* missing plugin messages */
-  GList *missing;
-
   gboolean buffering;
   gboolean is_live;
 
   GstState desired_state;       /* as per user interaction, PAUSED or PLAYING */
-
-  gulong deep_notify_id;
 
   /* configuration */
   gboolean gapless;
@@ -153,20 +149,14 @@ typedef enum
   GST_PLAY_TRACK_TYPE_SUBTITLE
 } GstPlayTrackType;
 
-static gboolean quiet = FALSE;
 static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer data);
-//static void play_about_to_finish (GstElement * playbin, gpointer user_data);
 static int play_reset (GstPlay * player);
-static gboolean play_do_seek (GstPlay * play, gint64 pos, gdouble rate,
-    GstPlayTrickMode mode);
-static void relative_seek (GstPlay * play, gdouble percent);
+static gboolean play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode);
 static void default_element_added(GstBin *bin, GstElement *element, gpointer user_data);
-
 void aamp_switch_trick_mode (GstPlay * play);
 int get_audio_track_num(GstPlay * play);
 static void play_track_selection (GstPlay * play, GstPlayTrackType track_type, gint index);
 static void play_set_playback_rate (GstPlay * play, gdouble rate);
-static int set_pipeline(GstPlay *player, gboolean use_playbin3, const gchar *flags_string, char* audio_sink, char* video_sink);
 static int agmp_replay (AGMP_HANDLE handle);
 static void set_aamp_state(GstPlay *player, PrivAAMPState state);
 static GstAllocator* handle_need_allocator(GstElement *wlcdmi, gboolean is_4k, guint decoder_format, gpointer user_data);
@@ -217,37 +207,39 @@ static void log_log(int level, const char *file, int line, const char *fmt, ...)
 
 static GstAllocator* handle_need_allocator(GstElement *wlcdmi, gboolean is_4k, guint decoder_format, gpointer user_data)
 {
-    GstPlay *play;
-    if (NULL == user_data)
-    {
-      gst_print ("user_data is null.\n");
-      return NULL;
-    }
-    play = (GstPlay *)user_data;
-    g_mutex_lock(&play->lock);
-    if (!play->allocator) {
-        play->allocator = gst_secmem_allocator_new(is_4k, decoder_format);
-        gst_print ("allocator new %p.\n", play->allocator);
-    }
-    g_mutex_unlock(&play->lock);
-    return play->allocator;
+  GstPlay *play;
+  if (NULL == user_data)
+  {
+    GST_ERROR ("user_data is null.");
+    return NULL;
+  }
+  play = (GstPlay *)user_data;
+
+  g_mutex_lock(&play->lock);
+  if (!play->allocator) {
+      play->allocator = gst_secmem_allocator_new(is_4k, decoder_format);
+      GST_DEBUG ("allocator new %p.", play->allocator);
+  }
+  g_mutex_unlock(&play->lock);
+
+  return play->allocator;
 }
 
 static void element_setup (GstElement *playbin, GstElement *element, gpointer user_data)
 {
+  GstElementFactory *f = gst_element_get_factory(element);
+  if (!f)
+      return;
 
-    GstElementFactory *f = gst_element_get_factory(element);
-    if (!f)
-        return;
-    if (!strcmp(GST_OBJECT_NAME (f), "wlcdmi")) {
-        g_signal_connect (G_OBJECT(element), "need-allocator", (GCallback) handle_need_allocator, user_data);
-        {
-          g_object_set (element, "external-allocator", TRUE, NULL);
-        }
-    } else if (!strcmp(GST_OBJECT_NAME (f), "hlsdemux")) {
-      gst_print ("use-hw-decrypt.\n");
-      g_object_set (element, "use-hw-decrypt", TRUE, NULL);
-    }
+  if (!strcmp(GST_OBJECT_NAME (f), "wlcdmi")) {
+      g_signal_connect (G_OBJECT(element), "need-allocator", (GCallback) handle_need_allocator, user_data);
+      {
+        g_object_set (element, "external-allocator", TRUE, NULL);
+      }
+  } else if (!strcmp(GST_OBJECT_NAME (f), "hlsdemux")) {
+    GST_DEBUG ("use-hw-decrypt.");
+    g_object_set (element, "use-hw-decrypt", TRUE, NULL);
+  }
 }
 
 static void default_element_added(GstBin *bin, GstElement *element, gpointer user_data)
@@ -255,14 +247,13 @@ static void default_element_added(GstBin *bin, GstElement *element, gpointer use
   GstPlay *play;
   if (NULL == user_data)
   {
-    gst_print ("user_data is null.\n");
+    GST_ERROR ("user_data is null.");
     return;
   }
 
   play = (GstPlay *)user_data;
 
   GST_DEBUG("New element added to %s : %s", GST_ELEMENT_NAME(bin), GST_ELEMENT_NAME(element));
-  g_print("New element added to %s : %s\n", GST_ELEMENT_NAME(bin), GST_ELEMENT_NAME(element));
 
   if (g_strrstr(GST_ELEMENT_NAME(element), "uridecodebin"))
   {
@@ -358,7 +349,7 @@ static void callback_to_app(GstPlay *player, AGMP_MESSAGE_TYPE type, void * user
 {
   if (NULL == player)
   {
-    gst_print ("player is null.\n");
+    GST_ERROR ("player is null.");
     return;
   }
   if (player->notify_app)
@@ -370,54 +361,56 @@ static void callback_to_app(GstPlay *player, AGMP_MESSAGE_TYPE type, void * user
 #define CHECK_POINTER_VALID(p) \
   do { \
     if (NULL == (p)) { \
-      gst_print ("pointer is null.\n"); \
+      GST_ERROR ("pointer is null."); \
       return AAMP_NULL_POINTER; \
     } \
   } while(0);
 
 static void video_underflow(gpointer handle)
 {
+  GstPlay *player = handle;
   if (NULL == handle)
   {
-    gst_print ("handle is null.\n");
+    GST_ERROR ("handle is null.");
     return;
   }
-  GstPlay *player = handle;
   callback_to_app(player, AGMP_MESSAGE_VIDEO_UNDERFLOW, player->userdata);
 }
 
 static void video_first_frame(gpointer handle)
 {
+  GstPlay *player = handle;
   if (NULL == handle)
   {
-    gst_print ("handle is null.\n");
+    GST_ERROR ("handle is null.");
     return;
   }
-  GstPlay *player = handle;
   callback_to_app(player, AGMP_MESSAGE_FIRST_VFRAME, player->userdata);
 }
 
 static void audio_underflow(gpointer handle)
 {
+  GstPlay *player = handle;
   if (NULL == handle)
   {
-    gst_print ("handle is null.\n");
+    GST_ERROR ("handle is null.");
     return;
   }
-  GstPlay *player = handle;
   callback_to_app(player, AGMP_MESSAGE_AUDIO_UNDERFLOW, player->userdata);
 }
 
+/*
 static void audio_first_frame(gpointer user_data)
 {
   if (NULL == user_data)
   {
-    gst_print ("user_data is null.\n");
+    GST_ERROR ("user_data is null.");
     return;
   }
   GstPlay *player = user_data;
   callback_to_app(player, AGMP_MESSAGE_FIRST_AFRAME, player->userdata);
 }
+*/
 
 int agmp_set_uri(AGMP_HANDLE handle, const char* uri)
 {
@@ -437,18 +430,17 @@ int agmp_set_license_url(AGMP_HANDLE handle, char* license_url)
 
 static gpointer play_run_thread(gpointer data)
 {
+  GstPlay *player = data;
   if (NULL == data)
   {
-    gst_print ("play thread failed\n");
+    GST_ERROR ("play thread failed.");
     return NULL;
   }
-  GstPlay *player = data;
 
-  CHECK_POINTER_VALID(player);
-  gst_print ("play thread enter\n");
+  GST_DEBUG ("play thread enter.");
   //block here
   g_main_loop_run (player->loop);
-  gst_print ("play thread quit\n");
+  GST_DEBUG ("play thread quit.");
 
   return NULL;
 }
@@ -456,24 +448,32 @@ static gpointer play_run_thread(gpointer data)
 int agmp_set_log_level (LOG_LEVEL level)
 {
   L.level = level;
+  return AAMP_SUCCESS;
 }
 
 AGMP_HANDLE agmp_init (void)
 {
   int argc = 0;
   char **argv = NULL;
-  gst_init(&argc, &argv);
-
-  GST_DEBUG_CATEGORY_INIT (agmp_debug, "agmp", 0, "amlogic gstreamer media player");
-  GST_TRACE("trace in");
-
   GstPlay *player;
+  gboolean use_playbin3 = FALSE;
+  gchar *flags_string = NULL;
+  const gchar *sink_name;
+  char* audio_sink = "amlhalasink";
+  char* video_sink = "westerossink";
+  GstElement *playbin = NULL;
+  GstElement *sink = NULL;
+
+  GST_DEBUG("agmp_init in");
+
+  gst_init(&argc, &argv);
+  GST_DEBUG_CATEGORY_INIT (agmp_debug, "agmp", 0, "amlogic gstreamer media player");
 
   player = g_new0 (GstPlay, 1);
   if (NULL == player)
   {
-    gst_print ("new player failed.\n");
-	  return NULL;
+    GST_ERROR ("new player failed.");
+    return NULL;
   }
 
   player->uri = NULL;
@@ -486,13 +486,11 @@ AGMP_HANDLE agmp_init (void)
   player->vsink = NULL;
 
   g_mutex_init (&player->selection_lock);
-  player->deep_notify_id = 0;
   player->loop = NULL;
   player->bus_watch = 0;
   player->notify_app = NULL;
   player->userdata = NULL;
 
-  player->missing = NULL;
   player->buffering = FALSE;
   player->is_live = FALSE;
   player->gapless = FALSE;
@@ -509,13 +507,8 @@ AGMP_HANDLE agmp_init (void)
   g_mutex_init(&player->lock);
   player->allocator = NULL;
 
-  gboolean use_playbin3 = FALSE;
-  gchar *flags_string = NULL;
-  char* audio_sink = "amlhalasink";
-  char* video_sink = "westerossink";
-
-  const gchar *sink_name = g_getenv ("GST_CFG_VIDEO_SINK");
-  if ( sink_name )
+  sink_name = g_getenv ("GST_CFG_VIDEO_SINK");
+  if (sink_name)
   {
      if (strstr(sink_name, "westerossink"))
         video_sink = "westerossink";
@@ -527,14 +520,13 @@ AGMP_HANDLE agmp_init (void)
         video_sink = "westerossink";
   }
 
-  GstElement *playbin = NULL;
   if (use_playbin3) {
     playbin = gst_element_factory_make ("playbin3", "playbin");
   } else {
     playbin = gst_element_factory_make ("playbin", "playbin");
   }
   if (playbin == NULL) {
-    gst_print ("make playbin failed.\n");
+    GST_ERROR ("make playbin failed.");
     return NULL;
   }
 
@@ -550,7 +542,6 @@ AGMP_HANDLE agmp_init (void)
       player->is_playbin3 = TRUE;
   }
 
-  GstElement *sink = NULL;
   //asink
   if (audio_sink != NULL) {
     if (strchr (audio_sink, ' ') != NULL)
@@ -566,7 +557,7 @@ AGMP_HANDLE agmp_init (void)
       //g_signal_connect_swapped (sink, "first-audio-frame-callback", G_CALLBACK(audio_first_frame), player);
     }
     else
-      g_warning ("Couldn't create specified audio sink '%s'", audio_sink);
+      GST_WARNING ("Couldn't create specified audio sink '%s'", audio_sink);
     player->asink = sink;
   }
 
@@ -585,7 +576,7 @@ AGMP_HANDLE agmp_init (void)
       g_signal_connect_swapped (player->vsink, "first-video-frame-callback", G_CALLBACK (video_first_frame), player);
     }
     else
-      g_warning ("Couldn't create specified video sink '%s'", video_sink);
+      GST_WARNING ("Couldn't create specified video sink '%s'", video_sink);
   }
 
   if (flags_string != NULL) {
@@ -598,28 +589,23 @@ AGMP_HANDLE agmp_init (void)
     if (gst_value_deserialize (&val, flags_string))
       g_object_set_property (G_OBJECT (player->playbin), "flags", &val);
     else
-      gst_printerr ("Couldn't convert '%s' to playbin flags!\n", flags_string);
+      GST_ERROR ("Couldn't convert '%s' to playbin flags!", flags_string);
     g_value_unset (&val);
   }
   else
   {
     gint default_flags = GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_TEXT | GST_PLAY_FLAG_NATIVE_VIDEO;
-    g_object_set(player->playbin, "flags", default_flags, NULL);
-    g_warning ("set default flag 0x%x", default_flags);
+    //g_object_set(player->playbin, "flags", default_flags, NULL);
+    GST_DEBUG ("do not set default flag 0x%x", default_flags);
   }
-
-  /*if (verbose) {
-    player->deep_notify_id =
-        gst_element_add_property_deep_notify_watch (player->playbin, NULL, TRUE);
-  }*/
 
   player->loop = g_main_loop_new (NULL, FALSE);
   player->bus_watch = gst_bus_add_watch (GST_ELEMENT_BUS (player->playbin), play_bus_msg, player);
 
-    //create play thread
+  //create play thread
   player->play_thread = g_thread_new ("video play run thread", play_run_thread, player);
   if (!player->play_thread) {
-      gst_print ("fail to create play thread");
+      GST_ERROR ("fail to create play thread");
       return NULL;
   }
 
@@ -627,49 +613,51 @@ AGMP_HANDLE agmp_init (void)
   player->timer_cnt = PROGRESS_CALLBACK_CNT;
 
   L.level = LOG_DEBUG;
+
   return (AGMP_HANDLE)player;
 }
 
 int agmp_prepare (AGMP_HANDLE handle)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
+  gboolean ret = TRUE;
 
-  gst_print ("prepare stream enter.\n");
+  GST_DEBUG ("agmp_prepare in");
+
   set_aamp_state(player, eSTATE_PREPARING);
   if (AGMP_STATUS_PREPARED == player->status)
   {
-	  gst_print ("already playing: %d.", player->status);
+    GST_ERROR ("already playing: %d.", player->status);
     return AAMP_SUCCESS;
   }
 
   if (player->status != AGMP_STATUS_NULL && player->status != AGMP_STATUS_STOPED)
   {
-    gst_print ("can't be called in this state: %d.", player->status);
+    GST_ERROR ("can't be called in this state: %d.", player->status);
     return AAMP_FAILED_IN_THIS_STATE;
   }
 
   play_reset (player);
   g_object_set (player->playbin, "uri", player->uri, NULL);
-  gboolean ret = TRUE;
+
   player->async_done = FALSE;
+
   switch (gst_element_set_state (player->playbin, GST_STATE_PAUSED)) {
   case GST_STATE_CHANGE_FAILURE:
-    gst_print ("Pipeline state change fail.\n");
+    GST_ERROR ("Pipeline state change fail.");
     /* ignore, we should get an error message posted on the bus */
     ret = FALSE;
     break;
   case GST_STATE_CHANGE_NO_PREROLL:
-    gst_print ("Pipeline is live.\n");
+    GST_DEBUG ("Pipeline is live.");
     player->is_live = TRUE;
     break;
   case GST_STATE_CHANGE_ASYNC:
-    gst_print ("Prerolling...\r");
+    GST_DEBUG ("Prerolling...");
     break;
   default:
-    gst_print ("Pipeline to paused.\n");
+    GST_DEBUG ("Pipeline to paused.");
     break;
   }
 
@@ -677,58 +665,59 @@ int agmp_prepare (AGMP_HANDLE handle)
     return AAMP_FAILED;
 
   player->status = AGMP_STATUS_PREPARED;
-  gst_print ("prepare stream over.\n");
+  GST_DEBUG ("prepare stream done.");
   set_aamp_state(player, eSTATE_PREPARED);
+
   return AAMP_SUCCESS;
 }
 
 int agmp_play (AGMP_HANDLE handle)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
-  gst_print ("play.\n");
+  GST_DEBUG ("agmp_play in");
+
   if (AGMP_STATUS_PLAYING == player->status)
   {
-	  gst_print ("already playing: %d.", player->status);
+    GST_ERROR ("already playing: %d.", player->status);
     return AAMP_SUCCESS;
   }
 
   if (player->status != AGMP_STATUS_PREPARED && player->status != AGMP_STATUS_PAUSED && player->status != AGMP_STATUS_STOPED)
   {
-    gst_print ("can't be called in this state: %d.", player->status);
+    GST_ERROR ("can't be called in this state: %d.", player->status);
     return AAMP_FAILED_IN_THIS_STATE;
   }
 
   player->desired_state = GST_STATE_PLAYING;
   gst_element_set_state (player->playbin, GST_STATE_PLAYING);
+
   return AAMP_SUCCESS;
 }
 
 int agmp_pause (AGMP_HANDLE handle)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
+  GST_DEBUG ("agmp_pause in");
+
   if (AGMP_STATUS_PAUSED == player->status)
   {
-	gst_print ("already paused: %d.", player->status);
+    GST_ERROR ("already paused: %d.", player->status);
     return AAMP_SUCCESS;
   }
 
   if (player->status != AGMP_STATUS_PLAYING)
   {
-    gst_print ("can't be called in this state: %d.", player->status);
+    GST_ERROR ("can't be called in this state: %d.", player->status);
     return AAMP_FAILED_IN_THIS_STATE;
   }
 
   if (player->buffering) {
-    gst_print ("I am buffering, no need pause\n");
-	  return AAMP_SUCCESS;
+    GST_ERROR ("buffering, no need pause");
+    return AAMP_SUCCESS;
   }
 
   player->desired_state = GST_STATE_PAUSED;
@@ -739,22 +728,23 @@ int agmp_pause (AGMP_HANDLE handle)
 
 int agmp_stop (AGMP_HANDLE handle)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
+  GST_DEBUG("agmp_stop in");
+
   if (AGMP_STATUS_STOPED == player->status)
   {
-	  gst_print ("already stoped: %d.", player->status);
+    GST_ERROR ("already stoped: %d.", player->status);
     return AAMP_SUCCESS;
   }
 
   if (player->status != AGMP_STATUS_PREPARED && player->status != AGMP_STATUS_PLAYING && player->status != AGMP_STATUS_PAUSED)
   {
-    gst_print ("can't be called in this state: %d.", player->status);
+    GST_ERROR ("can't be called in this state: %d.", player->status);
     return AAMP_FAILED_IN_THIS_STATE;
   }
+
   set_aamp_state(player, eSTATE_STOPPING);
   gst_element_set_state (player->playbin, GST_STATE_READY);
   if (player->allocator) {
@@ -763,17 +753,19 @@ int agmp_stop (AGMP_HANDLE handle)
   }
 
   // wait state change
-  usleep(1000000);
+  g_usleep(1000000);
   set_aamp_state(player, eSTATE_STOPPED);
   player->status = AGMP_STATUS_STOPED;
+
+  return AAMP_SUCCESS;
 }
 
 void quit_thread(GstPlay* player)
 {
-  GST_TRACE("trace in");
+  GST_DEBUG("quit_thread in");
 
   if (player->play_thread) {
-    gst_print ("\njoin thread\n");
+    GST_DEBUG ("join thread\n");
     g_thread_join (player->play_thread);
     player->play_thread = NULL;
   }
@@ -781,43 +773,42 @@ void quit_thread(GstPlay* player)
 
 void quit_loop(GstPlay* player)
 {
-  GST_TRACE("trace in");
+  GST_DEBUG("to quit main loop");
 
   g_main_loop_quit (player->loop);
 }
 
 int agmp_exit (AGMP_HANDLE handle)
 {
-  GST_TRACE("trace in");
+  GST_DEBUG("agmp_exit in");
 
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
+
   set_aamp_state(player, eSTATE_RELEASED);
-  gst_print ("exit enter.\n");
+
   quit_loop(player);
   agmp_deinit(handle);
   quit_thread(player);
   g_source_remove (player->timer_id);
   g_free (player);
   player = NULL;
+
   //gst_deinit();
-  gst_print ("exit over.\n");
+
+  GST_DEBUG ("agmp_exit out");
+
   return AAMP_SUCCESS;
 }
 
 void agmp_deinit (AGMP_HANDLE handle)
 {
-  GST_TRACE("trace in");
+  GST_DEBUG("agmp_deinit %p in", handle);
 
-  CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
-  gst_print ("\nrelease\n");
-
-
-  /* No need to see all those pad caps going to NULL etc., it's just noise */
-  if (player->deep_notify_id != 0)
-    g_signal_handler_disconnect (player->playbin, player->deep_notify_id);
+  if (!player)
+    return;
 
   play_reset (player);
 
@@ -846,10 +837,11 @@ void agmp_deinit (AGMP_HANDLE handle)
 
 AGMP_SSTATUS agmp_get_state(AGMP_HANDLE handle)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
+
+  GST_DEBUG("status=%d", player->status);
+
   return player->status;
 }
 
@@ -866,11 +858,11 @@ unsigned int agmp_get_aamp_state(AGMP_HANDLE handle)
 
 static void set_aamp_state(GstPlay *player, PrivAAMPState state)
 {
-  GST_TRACE("trace in");
-
   if (NULL == player) {
     return;
   }
+
+  GST_DEBUG("state = %d", state);
 
   if (player->aamp_state != state) {
     player->aamp_state = state;
@@ -887,11 +879,13 @@ long long agmp_get_position(AGMP_HANDLE handle)
   }
   GstPlay* player = (GstPlay*)handle;
 
-  long long  pos = -1;
+  gint64  pos = -1;
   if (player->buffering)
-    return pos;
+    return -1;
+
   gst_element_query_position (player->playbin, GST_FORMAT_TIME, &pos);
-  return pos;
+
+  return (long long)pos;
 }
 
 long long agmp_get_duration(AGMP_HANDLE handle)
@@ -902,11 +896,13 @@ long long agmp_get_duration(AGMP_HANDLE handle)
   }
   GstPlay* player = (GstPlay*)handle;
 
-  long long  dur = -1;
+  gint64 dur = -1;
   if (player->buffering)
-    return dur;
+    return -1;
+
   gst_element_query_duration (player->playbin, GST_FORMAT_TIME, &dur);
-  return dur;
+
+  return (long long)dur;
 }
 
 int agmp_set_speed(AGMP_HANDLE handle, AGMP_PLAY_SPEED rate)
@@ -918,14 +914,14 @@ int agmp_set_speed(AGMP_HANDLE handle, AGMP_PLAY_SPEED rate)
 
   if (player->status != AGMP_STATUS_PLAYING)
   {
-    gst_print ("can't be called in this state: %d.", player->status);
+    GST_ERROR ("can't be called in this state: %d.", player->status);
     return AAMP_FAILED_IN_THIS_STATE;
   }
 
   double rate_level[] = {0.125, 0.25, 0.5, 1, 2, 4, 8};
   if (rate > sizeof(rate_level)/sizeof(rate_level[0])) {
-    gst_print ("rate out of range, %d.\n", rate);
-	  return AAMP_INVALID_PARAM;
+    GST_ERROR ("rate out of range, %d.", rate);
+    return AAMP_INVALID_PARAM;
   }
 
   double new_rate = rate_level[rate];
@@ -933,12 +929,12 @@ int agmp_set_speed(AGMP_HANDLE handle, AGMP_PLAY_SPEED rate)
   if (new_rate != player->rate)
   {
     player->rate = new_rate;
-    gst_print("set rate to %lf\n", player->rate);
+    GST_DEBUG("set rate to %lf", player->rate);
     play_set_playback_rate (player, player->rate);
   }
   else
   {
-    gst_print("no need to set rate %lf\n", player->rate);
+    GST_DEBUG("no need to set rate %lf", player->rate);
   }
   return AAMP_SUCCESS;
 }
@@ -955,26 +951,13 @@ int agmp_get_speed(AGMP_HANDLE handle)
 /* reset for new file/stream */
 static int play_reset (GstPlay * player)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(player);
 
-  g_list_foreach (player->missing, (GFunc) gst_message_unref, NULL);
-  player->missing = NULL;
+  GST_DEBUG("play_reset in");
 
   player->buffering = FALSE;
   player->is_live = FALSE;
   return AAMP_SUCCESS;
-}
-
-
-/* returns TRUE if something was installed and we should restart playback */
-static gboolean
-play_install_missing_plugins (GstPlay * play)
-{
-  /* FIXME: implement: try to install any missing plugins we haven't
-   * tried to install before */
-  return FALSE;
 }
 
 int agmp_replay (AGMP_HANDLE handle)
@@ -993,11 +976,11 @@ int agmp_replay (AGMP_HANDLE handle)
       /* ignore, we should get an error message posted on the bus */
       break;
     case GST_STATE_CHANGE_NO_PREROLL:
-      gst_print ("Pipeline is live.\n");
+      GST_DEBUG ("Pipeline is live.");
       player->is_live = TRUE;
       break;
     case GST_STATE_CHANGE_ASYNC:
-      gst_print ("Prerolling...\r");
+      GST_DEBUG ("Prerolling...");
       break;
     default:
       break;
@@ -1008,28 +991,28 @@ int agmp_replay (AGMP_HANDLE handle)
 
 int aamp_set_audio_track(AGMP_HANDLE handle, int trackid)
 {
-  GST_TRACE("trace in");
-
+  GST_DEBUG("audio track=%d", trackid);
   play_track_selection (handle, GST_PLAY_TRACK_TYPE_AUDIO, (gint)trackid);
+  return AAMP_SUCCESS;
 }
 
 int set_video_track(AGMP_HANDLE handle, int trackid)
 {
-  GST_TRACE("trace in");
-
+  GST_DEBUG("video track=%d", trackid);
   play_track_selection (handle, GST_PLAY_TRACK_TYPE_AUDIO, (gint)trackid);
+  return AAMP_SUCCESS;
 }
 
 int set_subtitle_track(AGMP_HANDLE handle, int trackid)
 {
-  GST_TRACE("trace in");
-
+  GST_DEBUG("subtitle track=%d", trackid);
   play_track_selection (handle, GST_PLAY_TRACK_TYPE_AUDIO, (gint)trackid);
+  return AAMP_SUCCESS;
 }
 
 int get_audio_track_num(GstPlay * player)
 {
-  GST_TRACE("trace in");
+  GST_DEBUG("get_audio_track_num in");
 
   CHECK_POINTER_VALID(player);
   /* playbin3 variables */
@@ -1040,7 +1023,7 @@ int get_audio_track_num(GstPlay * player)
     if (!player->collection) {
       gst_print ("No stream-collection\n");
       g_mutex_unlock (&player->selection_lock);
-      return;
+      return 0;
     }
 
     /* Check the total number of streams of each type */
@@ -1072,7 +1055,7 @@ int get_audio_track_num(GstPlay * player)
     g_object_get (player->playbin, "current-text", &cur, "n-text", &nb_text, "flags", &cur_flags, NULL);
   }
   g_mutex_unlock (&player->selection_lock);
-  gst_print (
+  GST_INFO (
       "audio track number:%d\n" \
       "video track number:%d\n" \
       "subtitle track number:%d\n",
@@ -1090,7 +1073,7 @@ int agmp_seek(AGMP_HANDLE handle, double position)
   GstQuery *query;
   gboolean seekable = FALSE;
 
-  gst_print("seek to %lf\n", position);
+  GST_DEBUG("seek to %lf", position);
   query = gst_query_new_seeking (GST_FORMAT_TIME);
   if (!gst_element_query (player->playbin, query)) {
     gst_query_unref (query);
@@ -1107,7 +1090,7 @@ int agmp_seek(AGMP_HANDLE handle, double position)
   gint64 pos = GST_SECOND * position;
 
   if (pos > dur) {
-    gst_print ("\n%s\n", "Reached end of play list.");
+    GST_DEBUG ("Reached end of play list.");
     agmp_stop(player);
   } else {
     if (pos < 0)
@@ -1118,7 +1101,8 @@ int agmp_seek(AGMP_HANDLE handle, double position)
   return AAMP_SUCCESS;
 
 seek_failed:
-  gst_print ("Could not seek\n");
+  GST_ERROR ("Could not seek");
+
   return AAMP_FAILED;
 }
 
@@ -1151,89 +1135,28 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
       GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
           GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.async-done");
 
-      gst_print ("Prerolled.\n");
-      if (player->missing != NULL && play_install_missing_plugins (player)) {
-        gst_print ("New plugins installed, trying again...\n");
-        replay (player);
-      }
+      GST_DEBUG ("Prerolled.");
+
       player->async_done = TRUE;
       //notify app
       callback_to_app(player, AGMP_MESSAGE_ASYNC_DONE, player->userdata);
       break;
-    case GST_MESSAGE_BUFFERING:{
+    case GST_MESSAGE_BUFFERING:
+    {
       gint percent;
-
       gst_message_parse_buffering (msg, &percent);
-
-#if 0
-      if (!player->buffering)
-        gst_print ("\n");
-
-      gst_print ("%s %d%%  \r", "Buffering...", percent);
-
-      if (percent == 100) {
-        // a 100% message means buffering is done
-        if (player->buffering) {
-          player->buffering = FALSE;
-          // no state management needed for live pipelines
-          if (!player->is_live)
-            gst_element_set_state (player->playbin, player->desired_state);
-        }
-      } else {
-        // buffering...
-        if (!player->buffering) {
-          if (!player->is_live)
-            gst_element_set_state (player->playbin, GST_STATE_PAUSED);
-          player->buffering = TRUE;
-        }
-      }
-#endif
 
       //notify app
       player->percent = percent;
       callback_to_app(player, AGMP_MESSAGE_BUFFERING, player->userdata);
       break;
     }
-    case GST_MESSAGE_CLOCK_LOST:{
-      gst_print ("Clock lost, selecting a new one\n");
-      gst_element_set_state (player->playbin, GST_STATE_PAUSED);
-      gst_element_set_state (player->playbin, GST_STATE_PLAYING);
-      break;
-    }
-    case GST_MESSAGE_LATENCY:
-      gst_print ("Redistribute latency...\n");
-      gst_bin_recalculate_latency (GST_BIN (player->playbin));
-      break;
-    case GST_MESSAGE_REQUEST_STATE:{
-      GstState state;
-      gchar *name;
-
-      name = gst_object_get_path_string (GST_MESSAGE_SRC (msg));
-
-      gst_message_parse_request_state (msg, &state);
-
-      gst_print ("Setting state to %s as requested by %s...\n",
-          gst_element_state_get_name (state), name);
-
-      gst_element_set_state (player->playbin, state);
-      g_free (name);
-      break;
-    }
     case GST_MESSAGE_EOS:
-      // print final position at end
-      //play_timeout (player);
-      //gst_print ("\n");
-      // and switch to next item in list
-      /*if (!player->wait_on_eos )
-      {
-          gst_print ("%s\n", "Reached end of play list.");
-          agmp_stop (player);
-        }*/
-
       //notify app
       callback_to_app(player, AGMP_MESSAGE_EOS, player->userdata);
       break;
-    case GST_MESSAGE_WARNING:{
+    case GST_MESSAGE_WARNING:
+    {
       GError *err;
       gchar *dbg = NULL;
 
@@ -1242,15 +1165,16 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
           GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.warning");
 
       gst_message_parse_warning (msg, &err, &dbg);
-      gst_printerr ("WARNING %s\n", err->message);
+      GST_WARNING ("WARNING %s", err->message);
       if (dbg != NULL)
-        gst_printerr ("WARNING debug information: %s\n", dbg);
+        GST_ERROR ("WARNING debug information: %s", dbg);
       g_clear_error (&err);
       g_free (dbg);
 
       break;
     }
-    case GST_MESSAGE_ERROR:{
+    case GST_MESSAGE_ERROR:
+    {
       GError *err;
       gchar *dbg;
 
@@ -1259,97 +1183,17 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
           GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.error");
 
       gst_message_parse_error (msg, &err, &dbg);
-      gst_printerr ("ERROR %s for %s\n", err->message,
-          player->uri);
+      GST_ERROR ("ERROR %s for %s", err->message, player->uri);
       if (dbg != NULL)
-        gst_printerr ("ERROR debug information: %s\n", dbg);
+        GST_ERROR ("ERROR debug information: %s", dbg);
       g_clear_error (&err);
       g_free (dbg);
 
       // flush any other error messages from the bus and clean up
       gst_element_set_state (player->playbin, GST_STATE_NULL);
 
-      if (player->missing != NULL && play_install_missing_plugins (player)) {
-        gst_print ("New plugins installed, trying again...\n");
-        agmp_replay (player);
-        break;
-      }
-      // try next item in list then
-      //if (!agmp_replay (player)) {
-        //gst_print ("%s\n", "Reached end of play list.");
-        //g_main_loop_quit (player->loop);
-      //}
       //notify app
       callback_to_app(player, AGMP_MESSAGE_ERROR, player->userdata);
-      break;
-    }
-    case GST_MESSAGE_ELEMENT:
-    {
-      GstNavigationMessageType mtype = gst_navigation_message_get_type (msg);
-      if (mtype == GST_NAVIGATION_MESSAGE_EVENT) {
-        GstEvent *ev = NULL;
-
-        if (gst_navigation_message_parse_event (msg, &ev)) {
-          GstNavigationEventType e_type = gst_navigation_event_get_type (ev);
-          switch (e_type) {
-            case GST_NAVIGATION_EVENT_KEY_PRESS:
-            {
-              const gchar *key;
-              if (gst_navigation_event_parse_key_event (ev, &key)) {
-                GST_INFO ("Key press: %s", key);
-              }
-              break;
-            }
-            case GST_NAVIGATION_EVENT_MOUSE_BUTTON_PRESS:
-            {
-              gint button;
-              if (gst_navigation_event_parse_mouse_button_event (ev, &button,
-                      NULL, NULL)) {
-                if (button == 4) {
-                  // wheel up
-                  //relative_seek (player, +0.08);
-                } else if (button == 5) {
-                  // wheel down
-                  //relative_seek (player, -0.01);
-                }
-              }
-              break;
-            }
-            default:
-              break;
-          }
-        }
-        if (ev)
-          gst_event_unref (ev);
-      }
-      break;
-    }
-    case GST_MESSAGE_PROPERTY_NOTIFY:{
-      const GValue *val;
-      const gchar *name;
-      GstObject *obj;
-      gchar *val_str = NULL;
-      gchar *obj_name;
-
-      gst_message_parse_property_notify (msg, &obj, &name, &val);
-
-      obj_name = gst_object_get_path_string (GST_OBJECT (obj));
-      if (val != NULL) {
-        if (G_VALUE_HOLDS_STRING (val))
-          val_str = g_value_dup_string (val);
-        else if (G_VALUE_TYPE (val) == GST_TYPE_CAPS)
-          val_str = gst_caps_to_string (g_value_get_boxed (val));
-        else if (G_VALUE_TYPE (val) == GST_TYPE_TAG_LIST)
-          val_str = gst_tag_list_to_string (g_value_get_boxed (val));
-        else
-          val_str = gst_value_serialize (val);
-      } else {
-        val_str = g_strdup ("(no value)");
-      }
-
-      gst_print ("%s: %s = %s\n", obj_name, name, val_str);
-      g_free (obj_name);
-      g_free (val_str);
       break;
     }
     case GST_MESSAGE_STREAM_COLLECTION:
@@ -1363,13 +1207,15 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
             (GstObject *) collection);
         g_mutex_unlock (&player->selection_lock);
       }
-      gst_print ("stream collect done.\n");
+      GST_DEBUG ("stream collect done.");
       break;
     }
     case GST_MESSAGE_STREAMS_SELECTED:
     {
       GstStreamCollection *collection = NULL;
       guint i, len;
+
+      GST_DEBUG ("SELECTED msg");
 
       gst_message_parse_streams_selected (msg, &collection);
       if (collection) {
@@ -1399,7 +1245,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
             } else if (type & GST_STREAM_TYPE_TEXT) {
               player->cur_text_sid = g_strdup (stream_id);
             } else {
-              gst_print ("Unknown stream type with stream-id %s", stream_id);
+              GST_ERROR ("Unknown stream type with stream-id %s", stream_id);
             }
             gst_object_unref (stream);
           }
@@ -1417,27 +1263,27 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
         gst_message_parse_state_changed (msg, NULL, &state, NULL);
 
         if (state == GST_STATE_VOID_PENDING) {
-          gst_print ("bus message status change to pending, %p\n", player->playbin);
+          GST_DEBUG ("bus message status change to pending, %p", player->playbin);
           GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
               GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.pending");
         }
         else if (state == GST_STATE_NULL) {
-          gst_print ("bus message status change to null, %p\n", player->playbin);
+          GST_DEBUG ("bus message status change to null, %p", player->playbin);
         }
         else if (state == GST_STATE_READY) {
-          gst_print ("bus message status change to ready, %p\n", player->playbin);
+          GST_DEBUG ("bus message status change to ready, %p", player->playbin);
           GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
               GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.ready");
         }
         else if (state == GST_STATE_PAUSED) {
-          gst_print ("bus message status change to paused, %p\n", player->playbin);
+          GST_DEBUG ("bus message status change to paused, %p", player->playbin);
           GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
               GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.paused");
           player->status = AGMP_STATUS_PAUSED;
           set_aamp_state(player, eSTATE_PAUSED);
         }
         else if (state == GST_STATE_PLAYING) {
-          gst_print ("bus message status change to playing, %p\n", player->playbin);
+          GST_DEBUG ("bus message status change to playing, %p", player->playbin);
           GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (player->playbin),
               GST_DEBUG_GRAPH_SHOW_ALL, "agmplayer.playing");
           player->status = AGMP_STATUS_PLAYING;
@@ -1448,14 +1294,7 @@ static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data
       break;
     }
     default:
-      /*if (gst_is_missing_plugin_message (msg)) {
-        gchar *desc;
-
-        desc = gst_missing_plugin_message_get_description (msg);
-        gst_print ("Missing plugin: %s\n", desc);
-        g_free (desc);
-        player->missing = g_list_append (player->missing, gst_message_ref (msg));
-      }*/
+      GST_DEBUG("not handle msg type=%d", GST_MESSAGE_TYPE (msg));
       break;
   }
 
@@ -1471,21 +1310,21 @@ int agmp_set_volume(AGMP_HANDLE handle, double volume)
 
   if (volume > 215)
   {
-	volume = 215;
-	gst_print("volume is out of range, set max volume[%lf]\n", volume);
+    volume = 215;
+    gst_print("volume is out of range, set max volume[%lf]\n", volume);
   }
 
   if (volume < 0)
   {
-	volume = 0;
-	gst_print("volume is out of range, set min volume[%lf]\n", volume);
+    volume = 0;
+    gst_print("volume is out of range, set min volume[%lf]\n", volume);
   }
 
   volume = ((int)(volume+0.5))/100.0;
   //gst_stream_volume_set_volume (GST_STREAM_VOLUME (player->playbin),
   //GST_STREAM_VOLUME_FORMAT_CUBIC, player->volume );
   if (!player->asink) {
-    gst_print ("set volume failed, asink is null.\n");
+    GST_ERROR ("set volume failed, asink is null.");
     return AAMP_FAILED;
   }
   player->volume = volume;
@@ -1511,7 +1350,7 @@ int agmp_set_video_mute(AGMP_HANDLE handle, int mute)
   GstPlay* player = (GstPlay*)handle;
   player->video_muted = mute;
   if (!player->vsink) {
-    gst_print ("set video mute failed, vsink is null.\n");
+    GST_ERROR ("set video mute failed, vsink is null.");
     return AAMP_FAILED;
   }
   g_object_set(player->vsink, "mute", player->video_muted, NULL);
@@ -1736,15 +1575,15 @@ static void play_track_selection (GstPlay * play, GstPlayTrackType track_type, g
   const gchar *prop_cur, *prop_n, *prop_get, *name;
   gint n = -1;
   guint flag, cur_flags;
-
-  GST_TRACE("trace in");
-
-  CHECK_POINTER_VALID(play);
   /* playbin3 variables */
   GList *selected_streams = NULL;
-  gint cur_audio_idx = -1, cur_video_idx = -1, cur_text_idx = -1;
   gint nb_audio = 0, nb_video = 0, nb_text = 0;
   guint len, i;
+
+  GST_DEBUG("play_track_selection in");
+
+  if (!play)
+    return;
 
   g_mutex_lock (&play->selection_lock);
   if (play->is_playbin3) {
@@ -1922,8 +1761,6 @@ int aamp_get_media_track_num(AGMP_HANDLE handle, int* pn_video, int* pn_audio, i
 {
   gint n_video, n_audio, n_text;
 
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   CHECK_POINTER_VALID(pn_video);
   CHECK_POINTER_VALID(pn_audio);
@@ -1935,6 +1772,8 @@ int aamp_get_media_track_num(AGMP_HANDLE handle, int* pn_video, int* pn_audio, i
   g_object_get (play->playbin, "n-audio", &n_audio, NULL);
   g_object_get (play->playbin, "n-text", &n_text, NULL);
 
+  GST_INFO("video num=%d, audio num=%d, text num=%d", n_video, n_audio, n_text);
+
   *pn_video = n_video;
   *pn_audio = n_audio;
   *pn_text = n_text;
@@ -1944,13 +1783,13 @@ int aamp_get_media_track_num(AGMP_HANDLE handle, int* pn_video, int* pn_audio, i
 
 int aamp_get_video_track_info(AGMP_HANDLE handle, int track_id, VideoInfo* video_info)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   CHECK_POINTER_VALID(video_info);
   GstPlay* play = (GstPlay*)handle;
   GstTagList *tags;
   gchar *str, *total_str;
+
+  GST_DEBUG("video track id = %d", track_id);
 
   video_info->track_id = track_id;
   tags = NULL;
@@ -1963,7 +1802,8 @@ int aamp_get_video_track_info(AGMP_HANDLE handle, int track_id, VideoInfo* video
 
     if (gst_tag_list_get_string (tags, GST_TAG_VIDEO_CODEC, &str)) {
       total_str = g_strdup_printf ("  codec: %s\n", str ? str : "unknown");
-      //gst_print ("%s\n", total_str);
+      GST_INFO("%s", total_str);
+
       memset(video_info->codec, 0, INFO_STRING_MAXLEN);
       strncpy(video_info->codec, str, INFO_STRING_MAXLEN-1);
       g_free (total_str);
@@ -1971,7 +1811,8 @@ int aamp_get_video_track_info(AGMP_HANDLE handle, int track_id, VideoInfo* video
     }
     if (gst_tag_list_get_string (tags, GST_TAG_CONTAINER_FORMAT, &str)) {
       total_str = g_strdup_printf ("  container: %s\n", str);
-      //gst_print ("%s\n", total_str);
+      GST_INFO("container = %s", total_str);
+
       memset(video_info->container, 0, INFO_STRING_MAXLEN);
       strncpy(video_info->container, str, INFO_STRING_MAXLEN-1);
       g_free (total_str);
@@ -1983,13 +1824,14 @@ int aamp_get_video_track_info(AGMP_HANDLE handle, int track_id, VideoInfo* video
   GstPad *pad;
   g_signal_emit_by_name (play->playbin, "get-video-pad", track_id, &pad, NULL);
   if (pad != NULL) {
-    gint width=0, height=0, framerate=0;
+    gint width=0, height=0;
     GstCaps *caps = gst_pad_get_current_caps (pad);
     gst_structure_get_int (gst_caps_get_structure (caps, 0),"width", &width);
     gst_structure_get_int (gst_caps_get_structure (caps, 0),"height", &height);
     gint fr_num, fr_dem;
     gst_structure_get_fraction (gst_caps_get_structure (caps, 0),"framerate", &fr_num, &fr_dem);
-    //gst_print ("width:%d, height:%d, framerate:%d\n", width, height, fr_num/fr_dem);
+    GST_INFO("width=%d, height=%d, framerate=%d:%d\n", width, height, fr_num, fr_dem);
+
     video_info->width = width;
     video_info->height = height;
     video_info->framerate = (fr_dem==0 ? 0: fr_num/fr_dem);
@@ -2003,14 +1845,14 @@ int aamp_get_video_track_info(AGMP_HANDLE handle, int track_id, VideoInfo* video
 
 int aamp_get_audio_track_info(AGMP_HANDLE handle, int track_id, AudioInfo* audio_info)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   CHECK_POINTER_VALID(audio_info);
   GstPlay* play = (GstPlay*)handle;
   GstTagList *tags;
   gchar *str, *total_str;
   guint rate = 0;
+
+  GST_DEBUG("audio track id = %d", track_id);
 
   audio_info->track_id = track_id;
   tags = NULL;
@@ -2027,7 +1869,8 @@ int aamp_get_audio_track_info(AGMP_HANDLE handle, int track_id, AudioInfo* audio
 
     if (gst_tag_list_get_string (tags, GST_TAG_AUDIO_CODEC, &str)) {
       total_str = g_strdup_printf ("  codec: %s\n", str);
-      //gst_print ("%s\n", total_str);
+      GST_INFO("%s", total_str);
+
       memset(audio_info->codec, 0, INFO_STRING_MAXLEN);
       strncpy(audio_info->codec, str, INFO_STRING_MAXLEN-1);
       g_free (total_str);
@@ -2035,13 +1878,15 @@ int aamp_get_audio_track_info(AGMP_HANDLE handle, int track_id, AudioInfo* audio
     }
     if (gst_tag_list_get_string (tags, GST_TAG_LANGUAGE_NAME, &str)) {
       total_str = g_strdup_printf ("  language: %s\n", str);
-      //gst_print ("%s\n", total_str);
+      GST_INFO("%s", total_str);
+
       g_free (total_str);
       g_free (str);
     }
     if (gst_tag_list_get_uint (tags, GST_TAG_BITRATE, &rate)) {
       total_str = g_strdup_printf ("  bitrate: %d\n", rate);
-      //gst_print ("%s\n", total_str);
+      GST_INFO("%s", total_str);
+
       audio_info->rate = rate;
       g_free (total_str);
     }
@@ -2075,13 +1920,13 @@ int aamp_get_audio_track_info(AGMP_HANDLE handle, int track_id, AudioInfo* audio
 
 int aamp_get_text_track_info(AGMP_HANDLE handle, int track_id, TextInfo* text_info)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   CHECK_POINTER_VALID(text_info);
   GstPlay* play = (GstPlay*)handle;
   GstTagList *tags;
   gchar *str, *total_str;
+
+  GST_DEBUG("text track id = %d", track_id);
 
   text_info->track_id = track_id;
   tags = NULL;
@@ -2093,7 +1938,8 @@ int aamp_get_text_track_info(AGMP_HANDLE handle, int track_id, TextInfo* text_in
     g_free (total_str);
     if (gst_tag_list_get_string (tags, GST_TAG_LANGUAGE_CODE, &str)) {
       total_str = g_strdup_printf ("  language: %s\n", str);
-      //gst_print ("%s\n", total_str);
+      GST_INFO("text language = %s", total_str);
+
       memset(text_info->lang, 0, INFO_STRING_MAXLEN);
       strncpy(text_info->lang, str, INFO_STRING_MAXLEN-1);
       g_free (total_str);
@@ -2125,8 +1971,6 @@ int aamp_get_text_track_info(AGMP_HANDLE handle, int track_id, TextInfo* text_in
 
 int agmp_set_window_size(AGMP_HANDLE handle, int x, int y, int w, int h)
 {
-  GST_TRACE("trace in");
-
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
 
@@ -2136,17 +1980,17 @@ int agmp_set_window_size(AGMP_HANDLE handle, int x, int y, int w, int h)
   player->win_size.h = h;
 
   if (NULL == player->vsink) {
-    gst_print ("can't find vsink.\n");
+    GST_ERROR ("can't find vsink.");
     return AAMP_FAILED;
   }
 
-  gst_print ("w:%d, h:%d\n", player->win_size.w, player->win_size.h);
+  GST_DEBUG ("w=%d, h=%d", player->win_size.w, player->win_size.h);
   if (player->win_size.w > 0 && player->win_size.h > 0) {
     char videoRectangle[32] = {0};
     sprintf(videoRectangle, "%d,%d,%d,%d", player->win_size.x,player->win_size.y,player->win_size.w,player->win_size.h);
     memcpy(player->videoRectangle, videoRectangle, 32);
     g_object_set (player->vsink, "rectangle", player->videoRectangle, NULL);
-    gst_print ("set window size %s\n", videoRectangle);
+    GST_DEBUG ("set window size %s", videoRectangle);
   }
 
   return AAMP_SUCCESS;
@@ -2181,32 +2025,6 @@ int agmp_set_zoom(AGMP_HANDLE handle, int zoom)
 }
 
 #define INPUT_MAX_LEN 1024
-static void trim(char *cmd)
-{
-    //remove space
-    if (cmd[0] == ' ')
-    {
-        for (int i=0; i<strlen(cmd); i++)
-        {
-            if (cmd[i] != ' ')
-            {
-                memmove(cmd, &cmd[i], strlen(cmd)-i);
-                cmd[strlen(cmd)-i] = '\0';
-                break;
-            }
-        }
-    }
-
-    //remove space \n \r. if there is only one char, it is not effective.
-    for (int i = strlen(cmd) - 1; i >= 0; i--)
-    {
-        if (cmd[i] != ' ' && cmd[i] != '\r' && cmd[i] != '\n')
-        {
-            cmd[i+1] = '\0';
-            break;
-        }
-    }
-}
 
 static int porting_timeout (void* handle)
 {
@@ -2215,7 +2033,7 @@ static int porting_timeout (void* handle)
   }
 
   GstPlay* player = (GstPlay*)handle;
-  gint64 pos = -1, dur = -1;
+  long long pos = -1, dur = -1;
 
   if (player->buffering)
     return TRUE;
@@ -2228,9 +2046,9 @@ static int porting_timeout (void* handle)
     gchar dstr[32], pstr[32];
 
     /* FIXME: pretty print in nicer format */
-    g_snprintf (pstr, 32, "%" GST_TIME_FORMAT, GST_TIME_ARGS (pos));
+    g_snprintf (pstr, 32, "%" GST_TIME_FORMAT, GST_TIME_ARGS ((gint64)pos));
     pstr[9] = '\0';
-    g_snprintf (dstr, 32, "%" GST_TIME_FORMAT, GST_TIME_ARGS (dur));
+    g_snprintf (dstr, 32, "%" GST_TIME_FORMAT, GST_TIME_ARGS ((gint64)dur));
     dstr[9] = '\0';
     log_trace ("%s / %s\r", pstr, dstr);
 
@@ -2247,7 +2065,7 @@ static int porting_timeout (void* handle)
 
 int aamp_register_events(AGMP_HANDLE handle, message_callback callback, void* userdata)
 {
-  GST_TRACE("trace in");
+//  GST_TRACE("trace in");
 
   CHECK_POINTER_VALID(handle);
   GstPlay* player = (GstPlay*)handle;
