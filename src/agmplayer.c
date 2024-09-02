@@ -2050,7 +2050,7 @@ static int porting_timeout (void* handle)
     pstr[9] = '\0';
     g_snprintf (dstr, 32, "%" GST_TIME_FORMAT, GST_TIME_ARGS ((gint64)dur));
     dstr[9] = '\0';
-    log_trace ("%s / %s\r", pstr, dstr);
+    g_print ("%s / %s\r", pstr, dstr);
 
     // progress update call back
     if (player->timer_cnt >= PROGRESS_CALLBACK_CNT) {
