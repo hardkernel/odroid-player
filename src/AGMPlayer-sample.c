@@ -17,6 +17,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <string.h>
 #include <stdarg.h>
 #include <pthread.h>
@@ -90,6 +92,7 @@ static void agmp_message_callback(AGMP_HANDLE handle, AGMP_MESSAGE_TYPE type, vo
       if (!play_next (handle)) {
         printf ("reach the filelist end, stop.\n");
         agmp_stop (handle);
+        printf ("stop done.\n");
         player_quit=TRUE;
       }
       break;
@@ -155,20 +158,27 @@ AGMP_PLAY_SPEED play_speed = AGMP_PLAY_SPEED_1;
 static void* run_command (void* user_data)
 {
   double value = 0;
+  int stdin_fd = -1;
   AGMP_HANDLE handle = (AGMP_HANDLE) user_data;
   char cmd[INPUT_MAX_LEN] = {0};
 
 #if DEBUG_TEST_CMD
   int x = 0, y = 0, w = 0, h = 0;
 #endif
+  stdin_fd = fileno(stdin);
+  fcntl(stdin_fd, F_SETFL, O_NONBLOCK);
 
   while (!player_quit)
   {
     //copy cmd and trim
-    printf("agmplayer> ");
     char *ret = fgets(cmd, sizeof(cmd), stdin);
+    if (!ret)
+    {
+        usleep(5000);
+        continue;
+    }
     trim(cmd);
-    printf ("cmd:%s\n", cmd);
+    printf ("agmplayer> cmd: %s\n", cmd);
 
     if (sscanf(cmd, "seek %lf", &value) >= 1)
     {
