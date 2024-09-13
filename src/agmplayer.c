@@ -329,6 +329,7 @@ static void default_element_added(GstBin *bin, GstElement *element, gpointer use
       {
           play->vdec = element;
           g_object_set (play->vdec, "enable-nr", TRUE, NULL);
+          g_object_set (play->vdec, "local-buffer-pool", TRUE, NULL);
       }
       else if (g_strrstr(GST_ELEMENT_NAME(element), "avdec_"))
       {
