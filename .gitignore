@@ -3,13 +3,31 @@
 oe-logs
 oe-workdir
 
-build-aux/
+libtool
 m4/
+aclocal.m4
+autom4te.cache/
+
+build-aux/
+Makefile.in
+
+configure
+config.h.in
+config.h.in~
+configure~
+config.log
+config.status
+
+cscope.in.out
+cscope.out
+cscope.po.out
+tags
 
 COPYING
 INSTALL
-Makefile.in
-autom4te.cache/
-config.h.in
-config.h.in~
-configure
+.vscode
+
+.dirstamp
+.deps
+.libs
+*.lo

@@ -1,0 +1,13 @@
+[Unit]
+Description=c5play-client-oled
+After=c5play-server.service
+
+[Service]
+ExecStart=/usr/bin/c5play-client-oled
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
+

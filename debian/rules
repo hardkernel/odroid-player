@@ -1,6 +1,28 @@
 #!/usr/bin/make -f
 
 #export DH_VERBOSE=1
+export DESTDIR=$(CURDIR)/debian/odroid-player
+export LIBDIR=/usr/lib/aarch64-linux-gnu
+export BINDIR=/usr
 
 %:
-	dh $@
+	dh $@ --with autoreconf
+
+override_dh_auto_configure:
+	cd $(CURDIR) \
+	&& autoreconf -ivf \
+	&& ./configure --prefix=$(BINDIR) --libdir=$(LIBDIR)
+
+override_dh_auto_build:
+	protoc --proto_path=$(CURDIR)/src/message \
+	    --c_out=$(CURDIR)/src/message \
+ 		$(CURDIR)/src/message/message.proto
+	$(MAKE) -C $(CURDIR)
+
+override_dh_auto_install:
+	$(MAKE) -C $(CURDIR) install DESTDIR=$(DESTDIR)
+	find $(DESTDIR) -name '*.la' -delete
+
+override_dh_auto_clean:
+	$(MAKE) -C $(CURDIR) distclean || true
+

@@ -1,14 +1,45 @@
-Source: agmplayer
-Priority: optional
-Maintainer: Dongjin Kim <tobetter@gmail.com>
-Uploaders: Dongjin Kim <tobetter@gmail.com>
-Build-Depends: pkg-config, debhelper-compat (= 13),
-  libgstreamer1.0-dev
-Standards-Version: 4.6.0
-
-Package: agmplayer
+Source: odroid-player
+Maintainer: Phillip Choi <phillip.choi@hardkernel.com>
+Uploaders: Dongjin Kim <tobetter@gmail.com>,
+           Phillip Choi <phillip.choi@hardkernel.com>
 Section: misc
-Architecture: linux-any
-Depends: ${misc:Depends}
-Multi-Arch: same
-Description: ...
+Priority: optional
+Build-Depends: automake,
+               debhelper-compat (= 13),
+               g++,
+               libtool-bin,
+               make,
+               pkg-config,
+               aml-audio-hal-dev,
+               aml-mediahal-sdk,
+               gst-aml-drm-plugins-dev,
+               libgstreamer1.0-dev (>= 1.20),
+               libgstreamer-plugins-base1.0-dev,
+               libglib2.0-dev,
+               libprotobuf-dev,
+               libprotobuf-c-dev,
+               libprotoc-dev,
+               protobuf-compiler,
+               protobuf-c-compiler,
+               python3
+Standards-Version: 4.7.2
+
+Package: odroid-player
+Architecture: arm64
+Depends: aml-audio-server,
+         gstreamer1.0-amlogic,
+         libprotobuf-c1,
+         ${shlibs:Depends},
+         ${misc:Depends}
+Description: Simple media player for ODROID based on
+ AGMPlayer(Amlogic GStreamer Media Player). This package offers media server
+ for playback and CLI client to control the server.
+
+Package: odroid-player-example
+Architecture: arm64
+Depends: odroid-player
+Recommends: python3-virtualenv
+Description: Example sources for creating client application to work with
+ odroid-player. This package contains some client examples and libraries
+ which is based to create new client application.
+

@@ -1,13 +1,72 @@
-WHAT IT IS
-----------
+odroid-player
+=============
 
-This is a player based on gstreamer
+odroid-player is a simple media player based on AGMPlayer(Amlogic GStreamer Media Player).
 
-More features and templates might get added later on.
+NOTE
+----
+
+This player supports Linux platform only, and currently tested on ODROID-C5.
+However, more ODROID boards will be supported in the future. Explanations below are based on ODROID-C5 use case.
+
+HOW TO BUILD
+------------
+
+First, install the packages required for building the source.
+$ sudo apt install automake \
+                   g++ \
+                   libtool-bin \
+                   make \
+                   pkg-config \
+                   aml-audio-hal-dev \
+                   aml-mediahal-sdk \
+                   gst-aml-drm-plugins-dev \
+                   libgstreamer1.0-dev \
+                   libgstreamer-plugins-base1.0-dev \
+                   libglib2.0-dev \
+                   libprotobuf-dev \
+                   libprotoc-dev \
+                   libprotobuf-c-dev \
+                   protobuf-compiler
+
+Fetch the protobuf-c repository. It is required to compile the protobuf messages.
+$ cd odroid-player
+$ git submodule init
+$ git submodule update
+
+Build and install the protobuf-c.
+$ cd protobuf-c
+$ autoreconf -ivf && ./configure --prefix=/usr
+$ make && make install
+
+Build and install the odroid-player
+$ cd .. # back to the project root directory
+$ autoreconf -ivf && ./configure --prefix=/usr
+$ make && make install
+
+Additional package installation is required to run the program.
+$ sudo apt install aml-audio-server gstreamer1.0-amlogic
 
 HOW TO USE IT
 -------------
 
-AGMPlayer-sample.c
-We have provided a demo on how to use the APIs
+odroid-player consists of two parts: the server which handles media playback, and the client that controls the server.
+
+To play media server, using:
+$ sudo odroid-player /path/to/media
+
+For help, use:
+$ odroid-player --help
+
+To control the server, using:
+$ odroid-player-client
+
+For more information, visit Hardkernel Wiki: [link]
+
+CONTRIBUTING
+------------
+
+Copyright to all contributions are retained by the original author. However, all contributions are automatically licensed under the Apache License 2.0.
+
+Please add a 'signed-off-by' header to your commit message to indicate that you are licensing your contribution under these terms.
 

@@ -1,6 +1,7 @@
 ##########################################################################
 #
 # Copyright (C) 2021 Amlogic Corporation.
+# Copyright (C) 2025 Phillip Choi for Hardkernel.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,44 +23,65 @@ if ENABLE_SUBTEC
 AM_CPPFLAGS += -DENABLE_SUBTEC
 endif
 
-plugin_LTLIBRARIES = libAGMPlayer.la libAGMPlayerEs.la
+plugin_LTLIBRARIES = libagmplayer.la libopclient.la
+libagmplayer_la_SOURCES = server/agmp/agmplayer.c \
+                          server/agmp/agmplayer.h
+libagmplayer_la_CFLAGS = $(GST_CFLAGS)
+libagmplayer_la_LDFLAGS = $(GST_LIBS)
+libagmplayer_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 \
+                           -lgstvideo-1.0 -lgstsecmemallocator \
+                           $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
+libopclient_la_SOURCES = client/opc/opclient.c \
+                         client/opc/opclient.h \
+                         client/opc/opc_cmd.c \
+                         client/opc/opc_cmd.h \
+                         client/opc/opc_utils.c \
+                         client/opc/opc_utils.h \
+                         client/opc/monitor/monitor.c \
+                         client/opc/monitor/monitor.h \
+                         client/opc/receive/receive.c \
+                         client/opc/receive/receive.h \
+                         client/opc/response/response.c \
+                         client/opc/response/response.h \
+                         client/opc/send/send.c \
+                         client/opc/send/send.h \
+                         client/opc/utils/logger.c \
+                         client/opc/utils/logger.h \
+                         client/opc/utils/queue.c \
+                         client/opc/utils/queue.h \
+                         message/message.pb-c.c \
+                         message/message.pb-c.h
+libopclient_la_CFLAGS = $(GST_CFLAGS) $(PROTOBUF_C_CFLAGS)
+libopclient_la_LDFLAGS = $(GST_LIBS)  $(PROTOBUF_C_LIBS)
 
-libAGMPlayer_la_SOURCES = agmplayer.c agmplayer.h
-libAGMPlayer_la_CFLAGS =  $(GST_CFLAGS)
-libAGMPlayer_la_LDFLAGS = $(GST_LIBS)
-libAGMPlayer_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0 -lgstsecmemallocator \
-                            $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
-libAGMPlayer_la_LIBTOOLFLAGS = --tag=disable-static
+bin_PROGRAMS = odroid-player odroid-player-client
+odroid_player_SOURCES = server/main.c \
+                        server/agmp/agmp_cmds.c \
+                        server/agmp/agmp_utils.c \
+                        server/client/client.c \
+                        server/player/player.c \
+                        server/playlist/playlist.c \
+                        server/receive/receive.c \
+                        server/response/response.c \
+                        server/send/send.c \
+                        server/server/server.c \
+                        server/socket/socket.c \
+                        server/stream/stream.c \
+                        server/utils/fd_set.c \
+                        server/utils/logger.c \
+                        server/utils/queue.c \
+                        server/utils/watchdog.c \
+                        message/message.pb-c.c
+odroid_player_CFLAGS = $(GST_CFLAGS) $(PROTOBUF_C_CFLAGS)
+odroid_player_LDFLAGS = $(GST_LIBS) $(PROTOBUF_C_LIBS)
+odroid_player_LDFLAGS += -module -avoid-version
+odroid_player_LDADD = libagmplayer.la
 
-libAGMPlayerEs_la_SOURCES = agmplayer_es.c agmplayer_es.h \
-                            agmplayer_es_video_color_metadata.c agmplayer_es_video_color_metadata.h agmplayer_es_video_color_metadata_internal.h\
-                            agmplayer_es_cfgs.h \
-                            agmplayer_es_commons.h \
-                            agmplayer_es_infos.h \
-                            agmplayer_es_msgs.h \
-                            agmplayer_es_types.h \
-                            # agmplayer_es_secure.c agmplayer_es_secure.h
-
-libAGMPlayerEs_la_CFLAGS =  $(GST_CFLAGS)
-libAGMPlayerEs_la_LDFLAGS = $(GST_LIBS)
-libAGMPlayerEs_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 -lgstvideo-1.0 -lgstsecmemallocator \
-                            $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
-libAGMPlayer_la_LIBTOOLFLAGS = --tag=disable-static
-
-bin_PROGRAMS =  AGMPlayer-sample
-AGMPlayer_sample_SOURCES = AGMPlayer-sample.c
-AGMPlayer_sample_LDFLAGS = -module -avoid-version
-AGMPlayer_sample_LDADD = libAGMPlayer.la
-
-include_HEADERS = agmplayer.h \
-                  agmplayer_es.h \
-                  agmplayer_es_types.h \
-                  agmplayer_es_commons.h \
-                  agmplayer_es_video_color_metadata.h \
-                  agmplayer_es_infos.h \
-                  agmplayer_es_msgs.h \
-                  agmplayer_es_cfgs.h \
-                #   agmplayer_es_secure.h
-
-
+odroid_player_client_SOURCES = client/main.c \
+                               client/utils.c \
+                               message/message.pb-c.c
+odroid_player_client_CFLAGS = $(GST_CFLAGS) $(PROTOBUF_C_CFLAGS)
+odroid_player_client_LDFLAGS = $(GST_LIBS) $(PROTOBUF_C_LIBS)
+odroid_player_client_LDFLAGS += -module -avoid-version
+odroid_player_client_LDADD = libopclient.la
 

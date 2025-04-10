@@ -1,0 +1,13 @@
+[Unit]
+Description=c5play-server
+After=aml-audio-server.service
+
+[Service]
+ExecStart=/usr/bin/c5play-server --file=/opt/filelist.txt
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
+
