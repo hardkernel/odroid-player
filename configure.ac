@@ -1,6 +1,7 @@
 ##########################################################################
 #
 # Copyright (C) 2021 Amlogic Corporation.
+# Copyright (C) 2025 Phillip Choi for Hardkernel.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,38 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# This file has been modified by Phillip Choi (phillip.choi@hardkernel.com).
+# Original copyright belongs to Amlogic Corporation under Apache License 2.0.
+#
 ##########################################################################
 dnl                                               -*- Autoconf -*-
 dnl Process this file with autoconf to produce a configure script.
 
 dnl AC_PREREQ([2.69])
-AC_INIT(agmplayer, version-1.0)
+AC_INIT(odroid-player, version-1.0.0, phillip.choi@hardkernel.com)
 AC_CONFIG_SRCDIR([src])
-
-#get OUT_DIR
-AC_ARG_WITH([path], [AS_HELP_STRING([--with-path=PATH], [specify path])])
-if test "x$with_path" != "x"; then
-    OUT_DIR=$with_path
-else
-    OUT_DIR=.
-fi
-echo "OUT_DIR = $OUT_DIR"
-
-#check aml_version.h file, if not exist, copy from aml_version.h.in
-if test -e "$OUT_DIR/aml_version.h"; then
-    AC_MSG_RESULT([$OUT_DIR/aml_version.h file already exist])
-else
-    AC_MSG_RESULT(create [$OUT_DIR/aml_version.h from $srcdir/src/aml_version.h.in])
-    AC_MSG_NOTICE([Source directory: $srcdir])
-    AC_MSG_NOTICE([OUT_DIR directory: $OUT_DIR])
-    mkdir -p $OUT_DIR/src/
-    cp $srcdir/aml_version.h.in $OUT_DIR/aml_version.h
-fi
 
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE([foreign no-dist-gzip dist-bzip2 1.9])
+AM_INIT_AUTOMAKE([foreign 1.9 subdir-objects])
 LT_INIT
 
 dnl subdirectories.
@@ -70,23 +54,42 @@ dnl **********************************
 AC_HEADER_STDC
 
 dnl Checks for header files.
-AC_CHECK_HEADERS([limits.h memory.h stdlib.h string.h sys/socket.h unistd.h])
+AC_CHECK_HEADERS([assert.h 
+                  ctype.h 
+                  dirent.h
+                  errno.h
+                  fcntl.h
+                  limits.h 
+                  memory.h 
+                  netinet/in.h
+                  pthread.h
+                  setjmp.h
+                  stdarg.h
+                  stdbool.h
+                  stddef.h 
+                  stdio.h
+                  stdlib.h 
+                  signal.h
+                  string.h 
+                  sys/select.h 
+                  sys/socket.h 
+                  sys/stat.h
+                  sys/un.h
+                  termios.h
+                  time.h
+                  unistd.h])
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 dnl AC_CHECK_HEADER_STDBOOL
 AC_TYPE_UINT8_T
 
+# TODO ...
 dnl Checks for library functions.
 AC_FUNC_MALLOC
-AC_CHECK_FUNCS([memset strdup strerror])
+AC_CHECK_FUNCS([assert free malloc memset strdup strerror])
 
-dnl GStreamer version. Use 1.10 by default
-AC_ARG_ENABLE(gstreamer1,
-              AS_HELP_STRING([--enable-gstreamer1],
-                             [Use GStreamer 1.x]), ,
-              [enable_gstreamer1=auto])
-
-ENABLE_SUBTEC = false
+dnl Check subtec is enabled
+# ENABLE_SUBTEC = false
 AC_ARG_ENABLE([subtec],
               AS_HELP_STRING([--enable-subtec],[enable subtec filter + sink (default is no)]),
               [
@@ -99,30 +102,47 @@ AC_ARG_ENABLE([subtec],
               [echo "subtec is disabled"])
 AM_CONDITIONAL([ENABLE_SUBTEC], [test x$ENABLE_SUBTEC = xtrue])
 AC_MSG_NOTICE([subtec is $ENABLE_SUBTEC])
+AC_SUBST(ENABLE_SUBTEC)
 
-AS_IF([test "x$enable_gstreamer1" = "xyes"], [
-  GST_MAJORMINOR=1.0
-  PKG_CHECK_MODULES([GST], [gstreamer-1.0 >= 1.4], have_gst1="yes", have_gst1="no")
+dnl Check GStreamer version. Use 1.10 by default
+GST_MAJORMINOR=1.0
+AC_SUBST(GST_MAJORMINOR)
 
-  AS_IF([test "x$have_gst1" = "xyes"], [
+PKG_CHECK_MODULES([GST], [gstreamer-1.0 >= 1.20],
+                  [have_gst1="yes"],
+                  [have_gst1="no"])
+
+AS_IF([test "x$have_gst1" = "xyes"], [
     AC_DEFINE(USE_GST1, 1, [Build with GStreamer 1.x])
-  ], [])
-], [])
-
-AS_IF([test "x$enable_gstreamer1" = "xyes" -a "x$have_gst1" != "xyes"], [
-   AC_MSG_ERROR([Could not find GStreamer 1.x dependencies:
-
-$GST_PKG_ERRORS])], [])
-
-AS_IF([test "x$have_gst1" != "xyes"], [
-  GST_MAJORMINOR=0.10
-  PKG_CHECK_MODULES([GST], [gstreamer-0.10 >= 0.10.28])
-], [])
+], [
+    AC_MSG_ERROR([Could not find GStreamer 1.x dependencies: $GST_PKG_ERRORS])
+])
 
 plugindir="\$(libdir)/"
-PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 0.10.28])
-AC_SUBST(GST_MAJORMINOR)
-AC_SUBST(ENABLE_SUBTEC)
 AC_SUBST(plugindir)
+
+dnl Check GLib version
+PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 0.10.28],
+                  [have_glib="yes"],
+                  [have_glib="no"])
+
+AS_IF([test "x$have_glib" = "xyes"], [
+    AC_DEFINE(USE_GLIB, 1, [Build with GLib-2.0])
+], [
+    AC_MSG_ERROR([Could not find GLib-2.0 dependencies])
+])
+
+dnl Check Protobuf-c version
+PKG_CHECK_MODULES([PROTOBUF_C], [libprotobuf-c >= 1.0.0],
+                  [have_proto="yes"],
+                  [have_proto="no"])
+
+AS_IF([test "x$have_proto" = "xyes"], [
+    AC_DEFINE(USE_GLIB, 1, [Build with Protobuf-c])
+], [
+    AC_MSG_ERROR([Could not find Protobuf-c dependencies])
+])
+
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
+

@@ -1,0 +1,43 @@
+syntax = "proto2";
+
+enum Status {
+    SUCCESS = 0;
+    INVALID = 1;
+    TOOMANY = 2;
+    TIMEOUT = 3;
+    ESERVER = 4;
+    ECLIENT = 5;
+    RECONNT = 6;
+    BRDINFO = 7;
+}
+
+enum CmdType {
+    COMMAND = 0;
+    STREAM  = 1;
+    NOTIFY  = 2;
+    BRDCAST = 3;
+}
+
+enum Cmd {
+    NONE = 0;
+    PLAY = 1;
+    STOP = 2;
+    PAUSE = 3;
+    NEXT = 4;
+    PREV = 5;
+    QUIT = 6;
+    SEEK = 7;
+    TIME = 8;
+    URI = 9;
+    ACK = 10;
+    CMD_COUNT = 11;
+}
+
+message AMessage {
+    required Status     status = 1 [default = SUCCESS];
+    required CmdType    type = 2 [default = COMMAND];
+    required Cmd        cmd = 3 [default = NONE];
+    required int32      idx = 4;
+    repeated string     data = 5;
+}
+

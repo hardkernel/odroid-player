@@ -1,0 +1,108 @@
+<!-- SPDX-FileCopyrightText: 2025 Phillip Choi for Hardkernel
+     SPDX-License-Identifier: Apache-2.0 -->
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGMPlayer</title>
+    <script src="https://cdn.socket.io/3.1.3/socket.io.min.js"></script>
+    <style>
+      h1 {
+        padding: 10px 10px;
+        margin: 0;
+        font-size: 48px;
+      }
+      h2 {
+        padding: 10px 10px;
+        margin: 0;
+        font-size: 32px;
+      }
+	  button {
+		padding: 20px 40px;
+		margin: 10px;
+		font-size: 20px;
+		min-width: 120px;
+		min-height: 60px;
+	  }
+	  .active {
+		background-color: #A0A0A0;
+		color: white;
+		font-weight: bold;
+	  }
+    </style>
+</head>
+<body>
+    <h1>Odroid-Player Web Control</h1>
+
+	<h2>Playing: <span id="uri">NULL</span></h2>
+    <h2>Current Time: <span id="time">Loading...</span></h2>
+
+    <button id="btn-play" onclick="sendCommand('play')">Play</button>
+    <button id="btn-pause" onclick="sendCommand('pause')">Pause</button>
+    <button id="btn-next" onclick="sendCommand('next')">Next</button>
+    <button id="btn-prev" onclick="sendCommand('prev')">Previous</button>
+
+    <div><span id="msg"></span></div>
+
+    <script>
+      window.onload = function() {
+        fetch("/control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command: "uri" })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log(data);
+          if (data.uri != null)
+            document.getElementById("uri").innerText = data.uri;
+        });
+        document.getElementById("msg").innerText = "";
+      }
+
+      const socket = io.connect("http://" + document.domain + ":" + location.port);
+
+      socket.on("update_time", function(data) {
+        document.getElementById("time").innerText = data.current_time;
+      });
+
+      socket.on("update_uri", function(data) {
+          document.getElementById("uri").innerText = data.uri;
+      });
+
+      socket.on("broadcast", function(data) {
+        const command = data.message;
+
+        const btn = document.getElementById("btn-" + command);
+        if (btn) {
+          document.querySelectorAll("button").forEach(btn => {
+            btn.classList.remove("active");
+          });
+          btn.classList.add("active");
+        };
+      });
+
+      socket.on("message", function(data) {
+        console.log("got message");
+        document.getElementById("msg").innerText = data.message;
+      });
+
+      function sendCommand(command) {
+        fetch("/control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command: command })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log(data);
+          if (data.uri != null)
+            document.getElementById("uri").innerText = data.uri;
+        });
+      }
+    </script>
+</body>
+</html>
+

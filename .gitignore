@@ -4,12 +4,24 @@ oe-logs
 oe-workdir
 
 build-aux/
-m4/
-
 COPYING
 INSTALL
 Makefile.in
+aml_version.h
+aclocal.m4
 autom4te.cache/
+configure
 config.h.in
 config.h.in~
-configure
+configure~
+aml_version.h.in
+
+config.log
+config.status
+cscope.in.out
+cscope.out
+cscope.po.out
+tags
+libtool
+
+.vscode
