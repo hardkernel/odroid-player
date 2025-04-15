@@ -25,3 +25,10 @@ tags
 libtool
 
 .vscode
+
+*.o
+
+.dirstamp
+.deps
+.libs
+*.lo

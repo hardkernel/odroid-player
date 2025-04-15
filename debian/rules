@@ -17,15 +17,9 @@ override_dh_shlibdeps:
 	echo "Skipping dh_shlibdeps..."
 
 override_dh_auto_configure:
-	cd $(CURDIR)/protobuf-c && autoreconf -ivf && ./configure --prefix=/usr
 	cd $(CURDIR) && autoreconf -ivf && ./configure --prefix=/usr
 
 override_dh_auto_build:
-	# Build and install protobuf-c first to compile the protobuf message
-	# which is required for building odroid-player.
-	$(MAKE) -C $(CURDIR)/protobuf-c
-	$(MAKE) -C $(CURDIR)/protobuf-c install DESTDIR=$(DESTDIR)
-	PATH="$(DESTDIR)/usr/bin:$(PATH)" \
 	protoc --proto_path=$(CURDIR)/src/message \
 	    --c_out=$(CURDIR)/src/message \
  		$(CURDIR)/src/message/message.proto
@@ -34,9 +28,6 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	$(MAKE) -C $(CURDIR) install DESTDIR=$(DESTDIR)
-	# Install protobuf-c again manually because shared libraries are not
-	# automatically configured that dh_makeshlibs is skipped.
-	$(MAKE) -C $(CURDIR)/protobuf-c install DESTDIR=$(DESTDIR)
 	install -Dm755 $(CURDIR)/src/examples/ir/odroid-player-client-ir \
 		$(DESTDIR)/usr/bin/odroid-player-client-ir
 	dh_virtualenv --install-suffix=odroid-player-python \
@@ -46,7 +37,6 @@ override_dh_auto_install:
 
 override_dh_auto_clean:
 	$(MAKE) -C $(CURDIR) distclean || true
-	$(MAKE) -C $(CURDIR)/protobuf-c distclean || true
 	$(MAKE) -C $(CURDIR)/src/examples/ir fclean || true
 	rm -rf $(CURDIR)/src/examples/oled/build \
 		$(CURDIR)/src/examples/oled/odroid_player_client_oled.egg-info/
