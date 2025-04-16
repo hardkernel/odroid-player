@@ -83,10 +83,8 @@ dnl Checks for typedefs, structures, and compiler characteristics.
 dnl AC_CHECK_HEADER_STDBOOL
 AC_TYPE_UINT8_T
 
-# TODO ...
 dnl Checks for library functions.
 AC_FUNC_MALLOC
-AC_CHECK_FUNCS([assert free malloc memset strdup strerror])
 
 dnl Check subtec is enabled
 # ENABLE_SUBTEC = false
@@ -104,7 +102,7 @@ AM_CONDITIONAL([ENABLE_SUBTEC], [test x$ENABLE_SUBTEC = xtrue])
 AC_MSG_NOTICE([subtec is $ENABLE_SUBTEC])
 AC_SUBST(ENABLE_SUBTEC)
 
-dnl Check GStreamer version. Use 1.10 by default
+dnl Check GStreamer version. Use 1.20 by default
 GST_MAJORMINOR=1.0
 AC_SUBST(GST_MAJORMINOR)
 

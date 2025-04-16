@@ -8,7 +8,7 @@
 # include <stdio.h>
 # include <stdlib.h>
 
-# define SYSTEM_LIB_PATH "/usr/lib/libopclient.so"
+# define SYSTEM_LIB_PATH "/usr/lib/aarch64-linux-gnu/libopclient.so"
 # define OPC_LIB_PATH "../../.libs/libopclient.so"
 
 typedef struct _ODROID_PLAYER_CLIENT OP_CLIENT;

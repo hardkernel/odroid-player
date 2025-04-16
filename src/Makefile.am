@@ -31,8 +31,6 @@ libagmplayer_la_LDFLAGS = $(GST_LIBS)
 libagmplayer_la_LDFLAGS += -lgstpbutils-1.0 -lgsttag-1.0 -lgstaudio-1.0 \
                            -lgstvideo-1.0 -lgstsecmemallocator \
                            $(GST_BASE_LIBS) $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS)
-libagmplayer_la_LIBTOOLFLAGS = --tag=disable-static
-
 libopclient_la_SOURCES = client/opc/opclient.c \
                          client/opc/opclient.h \
                          client/opc/opc_cmd.c \
@@ -55,7 +53,6 @@ libopclient_la_SOURCES = client/opc/opclient.c \
                          message/message.pb-c.h
 libopclient_la_CFLAGS = $(GST_CFLAGS) $(PROTOBUF_C_CFLAGS)
 libopclient_la_LDFLAGS = $(GST_LIBS)  $(PROTOBUF_C_LIBS)
-libopclient_la_LIBTOOLFLAGS = --tag=disable-static
 
 bin_PROGRAMS = odroid-player odroid-player-client
 odroid_player_SOURCES = server/main.c \

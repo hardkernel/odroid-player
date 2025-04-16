@@ -12,10 +12,6 @@ Copyright:
   2025 Phillip Choi <phillip.choi@hardkernel.com>
 License: Apache-2.0
 
-Files: protobuf-c/*
-Copyright: 2008-2025, Dave Benson and the protobuf-c authors
-License: BSD-2-Clause
-
 Files: *
 Copyright: 2025 Phillip Choi <phillip.choi@hardkernel.com>
 License: Apache-2.0

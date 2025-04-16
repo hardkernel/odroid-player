@@ -1,11 +1,11 @@
 Source: odroid-player
-Priority: optional
 Maintainer: Phillip Choi <phillip.choi@hardkernel.com>
 Uploaders: Dongjin Kim <tobetter@gmail.com>,
            Phillip Choi <phillip.choi@hardkernel.com>
+Section: misc
+Priority: optional
 Build-Depends: automake,
                debhelper-compat (= 13),
-               dh-virtualenv,
                g++,
                libtool-bin,
                make,
@@ -20,20 +20,26 @@ Build-Depends: automake,
                libprotobuf-c-dev,
                libprotoc-dev,
                protobuf-compiler,
-               python3.10,
-               virtualenv
+               protobuf-c-compiler,
+               python3
 Standards-Version: 4.7.2
 
 Package: odroid-player
-Section: misc
 Architecture: arm64
 Depends: aml-audio-server,
-         gst-plugin-aml-v4l2dec,
-         debconf,
          gstreamer1.0-amlogic,
-         python3.10,
-         ${misc:Depends},
-         ${python:Depends}
-Multi-Arch: same
-Description: Simple media player for ODROID based on AGMPlayer(Amlogic GStreamer Media Player)
+         libprotobuf-c1,
+         ${shlibs:Depends},
+         ${misc:Depends}
+Description: Simple media player for ODROID based on
+ AGMPlayer(Amlogic GStreamer Media Player). This package offers media server
+ for playback and CLI client to control the server.
+
+Package: odroid-player-example
+Architecture: arm64
+Depends: odroid-player
+Recommends: python3-virtualenv
+Description: Example sources for creating client application to work with
+ odroid-player. This package contains some client examples and libraries
+ which is based to create new client application.
 

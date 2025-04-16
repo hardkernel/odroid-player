@@ -2,44 +2,27 @@
 
 #export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/odroid-player
-export DH_VIRTUALENV_INSTALL_ROOT=/usr/bin
-export DEB_BUILD_OPTIONS=nostrip nodwz
+export LIBDIR=/usr/lib/aarch64-linux-gnu
+export BINDIR=/usr
 
 %:
 	dh $@ --with autoreconf
 
-# Skipping dh_strip, dh_dwz, dh_makeshlibs and dh_shlibdeps because
-# packaging python environment makes errors by these.
-override_dh_makeshlibs:
-	echo "Skipping dh_makeshlibs..."
-
-override_dh_shlibdeps:
-	echo "Skipping dh_shlibdeps..."
-
 override_dh_auto_configure:
-	cd $(CURDIR) && autoreconf -ivf && ./configure --prefix=/usr
+	cd $(CURDIR) \
+	&& autoreconf -ivf \
+	&& ./configure --prefix=$(BINDIR) --libdir=$(LIBDIR)
 
 override_dh_auto_build:
 	protoc --proto_path=$(CURDIR)/src/message \
 	    --c_out=$(CURDIR)/src/message \
  		$(CURDIR)/src/message/message.proto
 	$(MAKE) -C $(CURDIR)
-	$(MAKE) -C $(CURDIR)/src/examples/ir
 
 override_dh_auto_install:
 	$(MAKE) -C $(CURDIR) install DESTDIR=$(DESTDIR)
-	install -Dm755 $(CURDIR)/src/examples/ir/odroid-player-client-ir \
-		$(DESTDIR)/usr/bin/odroid-player-client-ir
-	dh_virtualenv --install-suffix=odroid-player-python \
-		--sourcedirectory=$(CURDIR)/src/examples/web
-	dh_virtualenv --install-suffix=odroid-player-python \
-		--sourcedirectory=$(CURDIR)/src/examples/oled
+	find $(DESTDIR) -name '*.la' -delete
 
 override_dh_auto_clean:
 	$(MAKE) -C $(CURDIR) distclean || true
-	$(MAKE) -C $(CURDIR)/src/examples/ir fclean || true
-	rm -rf $(CURDIR)/src/examples/oled/build \
-		$(CURDIR)/src/examples/oled/odroid_player_client_oled.egg-info/
-	rm -rf $(CURDIR)/src/examples/web/build \
-		$(CURDIR)/src/examples/web/odroid_player_client_web.egg-info/
 

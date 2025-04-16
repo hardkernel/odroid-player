@@ -7,7 +7,7 @@ import os
 import time
 
 
-SYSTEM_LIB_PATH = "/usr/lib/libopclient.so"
+SYSTEM_LIB_PATH = "/usr/lib/aarch64-linux-gnu/libopclient.so"
 OPC_LIB_PATH = "../../.libs/libopclient.so"
 
 
