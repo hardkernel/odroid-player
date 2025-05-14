@@ -183,8 +183,6 @@ def main():
         client.connect()
         client.prepare()
 
-        print(client)
-
         g_client = client
 
         socketio.start_background_task(update_time, client)

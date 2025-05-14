@@ -235,7 +235,7 @@ bool    create_client_stream(int client_fd, t_client_pool* client_pool)
         free(client_socket);
     }
 
-    server_socket = create_socket_name("agmp_stream");
+    server_socket = create_socket_name("ops_stream");
     if (server_socket == NULL)
     {
         LOG_ERROR("couldn't create socket name");
@@ -243,7 +243,7 @@ bool    create_client_stream(int client_fd, t_client_pool* client_pool)
         return false;
     }
 
-    client_socket = create_socket_name("agmc_stream");
+    client_socket = create_socket_name("opc_stream");
     if (client_socket == NULL)
     {
         LOG_ERROR("couldn't create socket name");

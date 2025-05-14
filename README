@@ -25,22 +25,13 @@ $ sudo apt install automake \
                    libgstreamer-plugins-base1.0-dev \
                    libglib2.0-dev \
                    libprotobuf-dev \
-                   libprotoc-dev \
                    libprotobuf-c-dev \
-                   protobuf-compiler
-
-Fetch the protobuf-c repository. It is required to compile the protobuf messages.
-$ cd odroid-player
-$ git submodule init
-$ git submodule update
-
-Build and install the protobuf-c.
-$ cd protobuf-c
-$ autoreconf -ivf && ./configure --prefix=/usr
-$ make && make install
+                   libprotoc-dev \
+                   protobuf-compiler \
+                   protobuf-c-compiler \
+                   python3 
 
 Build and install the odroid-player
-$ cd .. # back to the project root directory
 $ autoreconf -ivf && ./configure --prefix=/usr
 $ make && make install
 

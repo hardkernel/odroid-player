@@ -24,7 +24,7 @@ char*   cmd_play(Status* status, t_player* player)
 
     *status = STATUS__SUCCESS;
     player_status = agmp_get_state(player->agmp_handle);
-    if (player_status == AGMP_STATUS_STOPPED) /* paused */
+    if (player_status == AGMP_STATUS_STOPPED)
     {
         start_watchdog_timer(player);
         ret = agmp_prepare(player->agmp_handle, agmp_msg);
@@ -49,10 +49,7 @@ char*   cmd_play(Status* status, t_player* player)
     return strdup(agmp_msg);
 }
 
-/* Stop the playing media
- * It removes current media frame from display
- * and flush current media stream
- */
+/* Stop the media stream */
 char*   cmd_stop(Status* status, t_player* player)
 {
     static char     agmp_msg[AGMP_BUFFER_SIZE];
@@ -133,7 +130,7 @@ char*   cmd_next(Status* status, t_player* player)
         return strdup(agmp_msg);
     }
 
-    /* Set next media to media stream */
+    /* Set next media stream */
     start_watchdog_timer(player);
     ret = agmp_prepare(player->agmp_handle, agmp_msg);
     stop_watchdog_timer(player);
@@ -195,7 +192,7 @@ char*   cmd_prev(Status* status, t_player* player)
         return strdup(agmp_msg);
     }
 
-    /* Set previous media to media stream */
+    /* Set previous media stream */
     start_watchdog_timer(player);
     ret = agmp_prepare(player->agmp_handle, agmp_msg);
     stop_watchdog_timer(player);

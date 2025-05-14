@@ -10,7 +10,7 @@
 # include "../utils/logger.h"
 # include "../utils/queue.h"
 
-# define SERVER_SOCKET_PATH "/tmp/agm_server.sock"
+# define SERVER_SOCKET_PATH "/tmp/op_server.sock"
 
 typedef struct  s_player t_player;
 

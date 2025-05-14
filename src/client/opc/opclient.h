@@ -25,7 +25,7 @@
 # include "./opc_utils.h"
 # include "../../message/message.pb-c.h"
 
-# define SOCKET_PATH "/tmp/agm_server.sock"
+# define SOCKET_PATH "/tmp/op_server.sock"
 # define SERVER_TIMEOUT 3
 # define CLIENT_TIMEOUT 3
 # define MAX_CONNECT_WAIT 30
