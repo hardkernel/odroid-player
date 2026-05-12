@@ -127,11 +127,10 @@ char*   get_stream_time(t_player* player)
 
     memset(buffer, 0, sizeof(buffer));
 
-    pos = agmp_get_position(player->agmp_handle);
+    pos = get_player_position(player);
     if (pos < 0)
     {
-        LOG_DEBUG("couldn't get position");
-        return NULL;
+        pos = 0;
     }
 
     hour = pos / (SECOND * 60 * 60);

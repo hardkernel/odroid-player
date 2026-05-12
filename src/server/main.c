@@ -244,7 +244,7 @@ int main(int argc, char **argv)
         goto close_player;
     }
 
-    player_wait(player);
+    wait_player(player);
 
 close_player:
     clear_player(player);

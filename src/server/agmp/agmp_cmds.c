@@ -13,208 +13,106 @@ char*   cmd_none(Status* status, t_player* player)
     return NULL;
 }
 
-/* Play the media stream */
 char*   cmd_play(Status* status, t_player* player)
 {
-    AGMP_SSTATUS    player_status;
-    static char     agmp_msg[AGMP_BUFFER_SIZE];
-    int             ret;
+    bool    paused;
+    bool    no_child;
 
     assert(player != NULL);
-
     *status = STATUS__SUCCESS;
-    player_status = agmp_get_state(player->agmp_handle);
-    if (player_status == AGMP_STATUS_STOPPED)
+
+    pthread_mutex_lock(&player->play_mutex);
+    paused = player->child_paused;
+    no_child   = (player->child_pid == 0);
+    pthread_mutex_unlock(&player->play_mutex);
+
+    if (paused)
     {
-        start_watchdog_timer(player);
-        ret = agmp_prepare(player->agmp_handle, agmp_msg);
-        stop_watchdog_timer(player);
-        if (ret > 0)
-        {
-            LOG_ERROR("%s", agmp_msg);
-            *status = STATUS__ESERVER;
-            return strdup(agmp_msg);
-        }
+        /* SIGSTOP → SIGCONT */
+        command_player(player, PLAY_CMD_RESUME);
+    }
+    else if (no_child)
+    {
+        command_player(player, PLAY_CMD_REPLAY);
     }
 
-    start_watchdog_timer(player);
-    ret = agmp_play(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
-    {
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-    }
-
-    return strdup(agmp_msg);
+    return strdup("play");
 }
 
-/* Stop the media stream */
+/* Terminate the running child. */
 char*   cmd_stop(Status* status, t_player* player)
 {
-    static char     agmp_msg[AGMP_BUFFER_SIZE];
-    int             ret;
-
     assert(player != NULL);
-
     *status = STATUS__SUCCESS;
 
-    start_watchdog_timer(player);
-    ret = agmp_stop(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
-    {
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-    }
+    command_player(player, PLAY_CMD_STOP);
 
-    return strdup(agmp_msg);
+    return strdup("stop");
 }
 
-/* Pause the media stream */
+/* SIGSTOP to the child. */
 char*   cmd_pause(Status* status, t_player* player)
 {
-    static char     agmp_msg[AGMP_BUFFER_SIZE];
-    int             ret;
-
     assert(player != NULL);
-
     *status = STATUS__SUCCESS;
 
-    start_watchdog_timer(player);
-    ret = agmp_pause(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
-    {
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-    }
+    command_player(player, PLAY_CMD_PAUSE);
 
-    return strdup(agmp_msg);
+    return strdup("pause");
 }
 
-/* Play next media file */
+/* Play next media file in the playlist. */
 char*   cmd_next(Status* status, t_player* player)
 {
-    static char     agmp_msg[AGMP_BUFFER_SIZE];
-    char*           filename;
-    int             cur_idx;
-    int             filenum;
-    int             ret;
+    char*   filename;
+    int     filenum;
+    int     idx;
 
     assert(player != NULL);
-
     *status = STATUS__SUCCESS;
 
-    cur_idx = get_playlist_cur_idx(player->playlist);
+    idx = get_playlist_cur_idx(player->playlist);
     filenum = get_playlist_filenum(player->playlist);
-    if (cur_idx + 1 >= filenum)
-    {
-        filename = strdup("End of the playlist");
-        return filename;
-    }
-    
-    /* Get next media file and set to the player */
-    filename = strdup(get_playlist_uri(player->playlist, cur_idx + 1));
-    load_next(player);
 
-    /* Stop player to flush media stream */
-    start_watchdog_timer(player);
-    ret = agmp_stop(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
+    if (idx + 1 >= filenum)
     {
-        free(filename);
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-        return strdup(agmp_msg);
+        if (!player->loop)
+        {
+            return strdup("End of the playlist");
+        }
+
+        filename = strdup(get_playlist_uri(player->playlist, 0));
+    }
+    else
+    {
+        filename = strdup(get_playlist_uri(player->playlist, idx + 1));
     }
 
-    /* Set next media stream */
-    start_watchdog_timer(player);
-    ret = agmp_prepare(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
-    {
-        free(filename);
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-        return strdup(agmp_msg);
-    }
-
-    /* Play media stream */
-    start_watchdog_timer(player);
-    ret = agmp_play(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
-    {
-        free(filename);
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-        return strdup(agmp_msg);
-    }
+    /* The running child gets signal to exit. */
+    command_player(player, PLAY_CMD_NEXT);
 
     return filename;
 }
 
-/* Play previous media file */
+/* Play previous media file in the playlist. */
 char*   cmd_prev(Status* status, t_player* player)
 {
-    static char     agmp_msg[AGMP_BUFFER_SIZE];
-    char*           filename;
-    int             cur_idx;
-    int             ret;
+    char*   filename;
+    int     idx;
 
     assert(player != NULL);
-
     *status = STATUS__SUCCESS;
 
-    cur_idx = get_playlist_cur_idx(player->playlist);
-    if (cur_idx - 1 < 0)
+    idx = get_playlist_cur_idx(player->playlist);
+    if (idx - 1 < 0)
     {
-        filename = strdup("Start of the playlist");
-        return filename;
-    }
-    
-    /* Get previous media file and set to the player */
-    filename = strdup(get_playlist_uri(player->playlist, cur_idx - 1));
-    load_prev(player);
-
-    /* Stop player to flush media stream */
-    start_watchdog_timer(player);
-    ret = agmp_stop(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
-    {
-        free(filename);
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-        return strdup(agmp_msg);
+        return strdup("Start of the playlist");
     }
 
-    /* Set previous media stream */
-    start_watchdog_timer(player);
-    ret = agmp_prepare(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
-    {
-        free(filename);
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-        return strdup(agmp_msg);
-    }
+    filename = strdup(get_playlist_uri(player->playlist, idx - 1));
 
-    /* Play media stream */
-    start_watchdog_timer(player);
-    ret = agmp_play(player->agmp_handle, agmp_msg);
-    stop_watchdog_timer(player);
-    if (ret > 0)
-    {
-        free(filename);
-        LOG_ERROR("%s", agmp_msg);
-        *status = STATUS__ESERVER;
-        return strdup(agmp_msg);
-    }
+    /* The running child is signalled to exit. */
+    command_player(player, PLAY_CMD_PREV);
 
     return filename;
 }
