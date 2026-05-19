@@ -1,2 +1,5 @@
 odroid-player (1.0.0)
-    * Initial release.
+    * Initial release
+
+odroid-player (1.1.0)
+    * Changed playback structure (fork/exec)
